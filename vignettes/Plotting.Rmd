@@ -100,4 +100,37 @@ exhibit similar spectra. We will use twoDxc to group these spectra together.
 tea.xsa2D <- group2D(tea.xsaFA, 60, 30)
 print(tea.xsa2D@pspec2D)
 ```
+# Multiple sample processing.
+XCMS parts.
+```{r}
+teas.files <- dir(system.file('tea_data', package = 'twoDxc'),
+                 full.names = T)[1:3]
+teas.group.info <- data.frame(sample_name = sub(basename(teas.files),
+                                                pattern = '.mzML',
+                                                replacement = '',
+                                                fixed = T),
+                              sample_group = c(rep('lvl_1', 3)),
+                              stringsAsFactors = F
+                              )
+teas.data <- readMSData(teas.files, pdata = new('NAnnotatedDataFrame',
+                                                teas.group.info),
+                        mode = 'onDisk')
+
+xchr.multi <- findChromPeaks(teas.data %>%
+                               filterRt(rt = c(4.8 * 60, 60 * 60)),
+                             param = cwp)
+pdp.multi <- PeakDensityParam(sampleGroups = teas.data$sample_group, 
+                              minFraction = (2/3), bw = 3)
+xchr.multi <- groupChromPeaks(xchr.multi, param = pdp.multi)
+xchr.multi <- fillChromPeaks(xchr.multi)
+```
+CAMERA parts.
+```{r}
+xsa.multi <- xsAnnotate(as(xchr.multi, 'xcmsSet'))
+xsaF.multi <- groupFWHM(xsa.multi, perfwhm = 0.6)
+xsaI.multi <- findIsotopes(xsaF.multi)
+xsaC.multi <- groupCorr(xsaI.multi)
+xsaFA.multi <- findAdducts(xsaC.multi, polarity = 'positive')
+plotPsSpectrum(xsaFA.multi, pspec = 1, maxlabel = 5)
+```
 

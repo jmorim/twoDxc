@@ -1,0 +1,28 @@
+Package: twoDxc
+Title: 2D LC and GC/MS Data Analysis
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Josh",
+           family = "Morimoto",
+           role = c("aut", "cre"),
+           email = "Joshua.Morimoto@tufts.edu",
+           comment = c(ORCID = "0000-0001-5309-6796"))
+Description: Groups and plots mass spectral data for two-dimensional
+    chromatography.
+License: `use_mit_license()`, `use_gpl3_license()` or friends to
+    pick a license
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.0
+Depends:
+    xcms,
+    CAMERA
+Imports:
+    dplyr,
+    ggplot2
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat
+VignetteBuilder: knitr

@@ -134,3 +134,8 @@ xsaFA.multi <- findAdducts(xsaC.multi, polarity = 'positive')
 plotPsSpectrum(xsaFA.multi, pspec = 1, maxlabel = 5)
 ```
 
+
+# group2D on multiple samples
+```{r}
+xsa2D.multi <- group2D(xsaFA.multi, 60, 30)
+```

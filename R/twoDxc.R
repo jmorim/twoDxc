@@ -85,7 +85,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
       # sum all peaks from npeaks to (but not including) isotopes,
       # including intensities
       # Need to adapt this for single sample case
-      if("npeaks" %in% matching.mzs){
+      if("npeaks" %in% colnames(matching.mzs)){
         condensed.ion <- condensed.ion %>%
           bind_cols(matching.mzs %>%
                       select(npeaks:isotopes) %>%

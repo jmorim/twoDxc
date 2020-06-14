@@ -7,6 +7,7 @@
 #    together
 # - Add regression testing argument to filter out bad ions after 2D grouping
 # - DONE Add function that plots 2D chromatogram heatmap
+#     - Limit digits for EIC in plot title, default to 4 past 0
 # - Remove empty elements from string columns in pspec.2d, e.g. adducts
 # - DONE Count the 2D peak groups
 # - Allow subsetting of 2D plots to minimize processing time
@@ -32,7 +33,7 @@ setClass('xsAnnotate2D',
 #' @param dead.time The time before the injection reaches the detector, defaults
 #'          to 0
 #' @param rt.tol The grouping tolerance in the RT dimension
-#' @param ppm.tol The grouping tolerance in the m/z direction
+#' @param ppm.tol The grouping tolerance in the m/z dimension
 #' @param parallelized If true, runs grouping in parallel. Requires the future
 #'          package
 #' @return An xsAnnotate2D object with the added pspec2D slot

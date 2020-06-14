@@ -305,7 +305,11 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
       mz.range <- ion + c(-abs.tol, abs.tol)
     }
     # filterMz data to get EIC data of structure [file, rt, mz, i]
-    eic.data <- as.data.frame(filterMz(filterFile(object, file), mz.range))
+    # Suppress warnings because each call to trimMz_Spectrum from filterMz
+    # is very helpful and tells me when a scan has an empty spectrum.
+    suppressWarnings(
+      eic.data <- as.data.frame(filterMz(filterFile(object, file), mz.range))
+    )
     # Need to change column name 'i' to 'intensity' to match TIC method
     colnames(eic.data)[4] = 'intensity'
 

@@ -183,6 +183,14 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 #  mod.time <- mod.time
 #  dead.time <- dead.time
 
+  # Check if future.apply is loaded if running in parallel is specified.
+  # For some reason !requireNamespace doesn't ever return TRUE
+#  if(parallelized == T && !requireNamespace('future.apply', quietly = T)){
+  if(parallelized == T && !'future.apply' %in% loadedNamespaces()){
+    warning("The package 'future.apply' must be installed to run group2D in
+            parallel. Defaulting to serial processing.\n")
+    parallelized = F
+  }
   # For each psg, use the function matchPsgs, see below
   if(parallelized == T){
     pspec2D <- do.call(rbind, future_lapply(

@@ -18,11 +18,11 @@ RoxygenNote: 7.1.0
 Depends:
     xcms,
     CAMERA,
-    future,
     ggplot2
 Imports:
-    dplyr,
-Suggests: 
+    dplyr
+Suggests:
+    future.apply,
     knitr,
     rmarkdown,
     testthat

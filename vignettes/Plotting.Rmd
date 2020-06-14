@@ -31,10 +31,8 @@ approximately 30 seconds before 2D valve modulation began, specified as the dead
 time.
 ```{r setup}
 library(twoDxc)
-#library(xcms)
 library(dplyr)
-#library(CAMERA)
-library(future)
+library(future.apply)
 
 tea.file <- system.file('tea_data', 'tea_pool_1.mzML', package = 'twoDxc')
 
@@ -101,6 +99,9 @@ tea.xsa2D <- group2D(tea.xsaFA, 60, 30)
 print(tea.xsa2D@pspec2D)
 ```
 # Multiple sample processing.
+Below follows the sample sample processing steps but for three replicates of
+the tea extraction.
+
 XCMS parts.
 ```{r}
 teas.files <- dir(system.file('tea_data', package = 'twoDxc'),
@@ -137,8 +138,24 @@ plotPsSpectrum(xsaFA.multi, pspec = 1, maxlabel = 5)
 
 # group2D on multiple samples
 ```{r}
+library(tictoc)
+tic()
 xsa2D.multi <- group2D(xsaFA.multi, 60, 30)
+toc()
 ```
+# Parallelization
+
+group2D can be run in parallel if `future.apply` is installed. The below block
+demonstrates an improvement in processing time when data are grouped in
+parallel.
+```{r}
+plan(multiprocess)
+tic()
+xsa2D.multi.p <- group2D(xsaFA.multi, 60, 30, parallelized = T)
+toc()
+```
+
+
 # Plotting 2D data
 
 Visualizing 2D chromatography data is easier as a heatmap plot, in which

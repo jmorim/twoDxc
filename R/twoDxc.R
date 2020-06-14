@@ -264,7 +264,7 @@ setGeneric('plot2D', function(object, file = 1, mod.time, dead.time = 0, ion,
                               mz.tol = c('ppm', 'abs'), ppm.tol = 20,
                               abs.tol = 0.5, log.scale = F,
                               save.output = F, filename = '2dplot.png',
-                              filepath = '.', print.output = T)
+                              filepath = '.', print.output = T, mz.digits = 4)
   standardGeneric('plot2D'))
 
 setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
@@ -274,7 +274,7 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
                                        log.scale = F,
                                        save.output = F, filename = '2dplot.png',
                                        filepath = '.',
-                                       print.output = T){
+                                       print.output = T, mz.digits = 4){
   ###
   # Is there a better way to select first element in list as default arg?
   mz.tol <- mz.tol[1]
@@ -363,8 +363,8 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
         if(missing(ion)){
           paste0('TIC: File ', file)
         }else{
-          paste0('EIC: Ions ', mz.range[1], ' - ',
-                 mz.range[2], ', File: ', file)
+          paste0('EIC: Ions ', round(mz.range[1], digits = mz.digits), ' - ',
+                 round(mz.range[2], digits = mz.digits), ', File: ', file)
       }) +
       theme_classic()
   if(save.output == T){

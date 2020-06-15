@@ -194,7 +194,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   # For each psg, use the function matchPsgs, see below
   if(parallelized == T){
     pspec2D <- do.call(rbind, future_lapply(
-      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20,
+      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
       parallelized = T))
     # Might change to using furrr and purrr
 #    pspec2D <- do.call(rbind, future_map(
@@ -202,7 +202,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 #      parallelized = T))
   }else{
     pspec2D <- do.call(rbind, lapply(
-      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))
+      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol))
     # Might change to using furrr and purrr
 #    pspec2D <- do.call(rbind, map(
 #      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))

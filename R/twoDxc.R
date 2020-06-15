@@ -196,9 +196,16 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
     pspec2D <- do.call(rbind, future_lapply(
       psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20,
       parallelized = T))
+    # Might change to using furrr and purrr
+#    pspec2D <- do.call(rbind, future_map(
+#      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20,
+#      parallelized = T))
   }else{
-  pspec2D <- do.call(rbind, lapply(
-    psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))
+    pspec2D <- do.call(rbind, lapply(
+      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))
+    # Might change to using furrr and purrr
+#    pspec2D <- do.call(rbind, map(
+#      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))
   }
 
   # Remove redundant pspecs (ones with same m/z and rt)
@@ -266,6 +273,8 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 #'          '2dplot.png' plus the file selected plus the ion selected.
 #' @param filepath Where to save the output file. Default is '.'
 #' @param print.output Whether to show the plot output. Default is TRUE
+#' @param mz.digits The number of digits after the decimal to show for m/z's
+#'          in the plot title. Default is 4
 #' @return A 2-dimensional plot
 #' @export
 setGeneric('plot2D', function(object, file = 1, mod.time, dead.time = 0, ion,

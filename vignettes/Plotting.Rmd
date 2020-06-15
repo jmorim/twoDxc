@@ -145,8 +145,8 @@ toc()
 ```
 # Parallelization
 
-group2D can be run in parallel if `future.apply` is installed. The below block
-demonstrates an improvement in processing time when data are grouped in
+group2D can run in parallel if `future.apply` is installed. The below block
+should demonstrate an improvement in processing time when data are grouped in
 parallel.
 ```{r}
 plan(multiprocess)
@@ -169,5 +169,5 @@ ion channels, this information underrepresents the chemical diversity in this
 metabolomics sample. Below is an example of an extracted ion chromatogram (EIC)
 for ion 195, representing caffeine.
 ```{r}
-plot2D(tea.data, file = 1, mod.time = 60, dead.time = 30, ion = 195.0880)
+plot2D(tea.data, file = 1, mod.time = 60, dead.time = 30, ion = 195.0882)
 ```

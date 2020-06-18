@@ -2,3 +2,5 @@
 .Rhistory
 *.RData
 troubleshooting/*
+.vscode
+workspace.code-workspace

@@ -48,127 +48,6 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
     stop('Error: not an xsAnnotate object')
   }
 
-
-  # Function for matching mzs with apply loop
-  # Not sure if it's bad to put a function in a function
-  matchMzs <- function(grouped.psg.mz, all.pspecs, ppm.tol, rt.tol){
-      Sys.sleep(1)
-      # Calculate the m/z range with ppm.tol
-      mz.range = calc.mz.Window(grouped.psg.mz, ppm.tol)
-      # Get the 1DRT
-
-      # Calculate the 2drt range with rt.tol
-#      rt.range =
-      # Get matching m/z's within tolerance in the other pspectra
-      # Add in RT tolerance
-      matching.mzs = all.pspecs %>%
-        filter(mz > mz.range[1] & mz < mz.range[2])
-      # Initialize matrix for condensed ion data
-      condensed.ion = NULL
-      # Populate matrix with summary functions to squish m/z data together
-      condensed.ion <- matching.mzs %>%
-        # mz col based on mean mz
-        summarise(mz = mean(mz)) %>%
-        bind_cols(matching.mzs %>%
-                    # take corresponding mins and maxes
-                    summarise(mzmin = min(mzmin)),
-                  matching.mzs %>%
-                    summarise(mzmax = max(mzmax)),
-                  # Take RT from most intense peak modulation
-                  # (max in 1D direction)
-                  matching.mzs %>%
-                    summarise(rt = matching.mzs[which(
-                      getInt(matching.mzs) ==
-                        max(getInt(matching.mzs), na.rm = T),
-                      arr.ind = T)[1], 'rt']),
-                  matching.mzs %>%
-                    summarise(rtmin = min(rtmin)),
-                  matching.mzs %>%
-                    summarise(rtmax = max(rtmax)))
-      # sum all peaks from npeaks to (but not including) isotopes,
-      # including intensities
-      # Need to adapt this for single sample case
-      if("npeaks" %in% colnames(matching.mzs)){
-        condensed.ion <- condensed.ion %>%
-          bind_cols(matching.mzs %>%
-                      select(npeaks:isotopes) %>%
-                      select(-isotopes) %>%
-                      summarise_all(sum, na.rm = T))
-      }else{
-        condensed.ion <- condensed.ion %>%
-          bind_cols(matching.mzs %>%
-                      summarise_at('into', sum))
-      }
-      # not a perfect solution for summarizing string data but can
-      # improve later
-      condensed.ion <- condensed.ion %>%
-        bind_cols(matching.mzs %>%
-                    summarise(isotopes = list(isotopes),
-                    adducts = list(adduct),
-                    psgs = list(psg))) %>%
-      # calculate 2d rts
-        mutate(rt.2d = convert.2drt(rt, mod.time, dead.time),
-             rtmin.2d = convert.2drt(rtmin, mod.time, dead.time),
-             rtmax.2d = convert.2drt(rtmax, mod.time, dead.time)) %>%
-        # Remove redundant ion data
-        distinct(mz, rt, .keep_all = T) %>%
-        # Reorder data
-        select(mz:rtmax,rt.2d:rtmax.2d, everything())
-    #  mz.counter <<- mz.counter + 1
-      return(condensed.ion)
-    }
-
-  # Function for matching psgs with matched m/zs and/or rts
-  matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, parallelized = F){
-    #Sys.sleep(1)
-    # Get pspectrum data for one pspec
-    pspecgroup = all.pspecs %>%
-      filter(psg == pseudospec)
-    # Take average retention time
-    #rt = mean(pspecgroup[, 'rt'])
-    # Determine quantitative ion by finding most common max ion in each sample
-    max.ion.vector = apply(getInt(pspecgroup), 2, which.max)
-    # Get the mode max ion's index, use to get the most intense ion
-    max.ion = pspecgroup[getMode(max.ion.vector), 'mz']
-    # Calculate m/z tolerance window using ppm.tol
-    mz.window = calc.mz.Window(max.ion, ppm.tol)
-    # Find psgs with ions in this m/z window
-    matching.psgs <- all.pspecs %>%
-      filter(mz > mz.window[1] & mz < mz.window[2]) %>%
-      # pull out psg number
-      pull(psg)
-    # Put all matching psgs into one 2D peak group
-    grouped.psgs <- all.pspecs %>%
-      filter(psg %in% matching.psgs)
-    condensed.psg <- NULL
-    # List all m/z's
-    mzs <- grouped.psgs[, 'mz']
-    # Find matching m/z's and add intensities together using matchMzs, above
-    if(parallelized == T){
-      condensed.psg <- do.call(rbind, future_lapply(
-        mzs, matchMzs, all.pspecs = all.pspecs, ppm.tol = ppm.tol,
-        rt.tol = rt.tol))
-    }else{
-    condensed.psg <- do.call(rbind, lapply(
-      mzs, matchMzs, all.pspecs = all.pspecs, ppm.tol = ppm.tol,
-      rt.tol = rt.tol))
-    }
-    # Remove redundant ions from the psg
-    #browser()
-    condensed.psg <- condensed.psg %>%
-      distinct(mz, rt, .keep_all = T) %>%
-      mutate('psg.2d' = psg.counter)
-#    print(condensed.psg)
-    # Print output message
-    cat(paste0('Adding 2D pspec ', psg.counter, '.\n'))
-    # Add to counter
-    ## Fix this, check if there's a counter already in the df and add to it
-    ## should get around the parallel problem.
-    ## can't access pspec.2D from here, it won't be formed till apply is done
-    psg.counter <<- psg.counter + 1L
-    return(condensed.psg)
-  }
-
   # Convert xsAnnotate to xsAnnotate2D
   new.object <- as(object, 'xsAnnotate2D')
   new.object@mod.time = mod.time
@@ -187,8 +66,10 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   pspec2D <- list()
   # Don't really need an m/z counter at the moment
  # mz.counter <<- 1
-#  psg.counter <<- 1
-  psg.counter <- 1L
+  psg.counter <<- 1L
+#  psg.counter <- 1L
+#  count.env <- new.env()
+#  local(psg.counter <- 1L, env = count.env)
 #  mod.time <- mod.time
 #  dead.time <- dead.time
 
@@ -215,7 +96,8 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 #  }else{
     pspec2D <- do.call(rbind, lapply(
       psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
-      parallelized = parallelized))
+      parallelized = parallelized,
+      mod.time = mod.time, dead.time = dead.time))
     # Might change to using furrr and purrr
 #    pspec2D <- do.call(rbind, map(
 #      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))
@@ -254,10 +136,136 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   # Print output message showing how many pspecs were grouped
   cat('Grouped', length(unique(new.object@pspec2D$psg.2d)), '2D pseudospectra\n')
   # Remove global vars
-#  rm('psg.counter', 'mod.time', 'dead.time', pos = 1L)
+  rm(psg.counter, pos = 1L)
   # Return object
   return(new.object)
 })
+
+# Function for matching mzs with apply loop
+# Not sure if it's bad to put a function in a function
+matchMzs <- function(grouped.psg.mz, all.pspecs, ppm.tol, rt.tol,
+                     mod.time = mod.time, dead.time = dead.time){
+    #Sys.sleep(1)
+    # Calculate the m/z range with ppm.tol
+    mz.range = calc.mz.Window(grouped.psg.mz, ppm.tol)
+    # Get the 1DRT
+
+    # Calculate the 2drt range with rt.tol
+#     rt.range =
+    # Get matching m/z's within tolerance in the other pspectra
+    # Add in RT tolerance
+    matching.mzs = all.pspecs %>%
+      filter(mz > mz.range[1] & mz < mz.range[2])
+    # Initialize matrix for condensed ion data
+    condensed.ion = NULL
+    # Populate matrix with summary functions to squish m/z data together
+    condensed.ion <- matching.mzs %>%
+      # mz col based on mean mz
+      summarise(mz = mean(mz)) %>%
+      bind_cols(matching.mzs %>%
+                  # take corresponding mins and maxes
+                  summarise(mzmin = min(mzmin)),
+                matching.mzs %>%
+                  summarise(mzmax = max(mzmax)),
+                # Take RT from most intense peak modulation
+                # (max in 1D direction)
+                matching.mzs %>%
+                  summarise(rt = matching.mzs[which(
+                    getInt(matching.mzs) ==
+                      max(getInt(matching.mzs), na.rm = T),
+                    arr.ind = T)[1], 'rt']),
+                matching.mzs %>%
+                  summarise(rtmin = min(rtmin)),
+                matching.mzs %>%
+                  summarise(rtmax = max(rtmax)))
+    # sum all peaks from npeaks to (but not including) isotopes,
+    # including intensities
+    # Need to adapt this for single sample case
+    if("npeaks" %in% colnames(matching.mzs)){
+      condensed.ion <- condensed.ion %>%
+        bind_cols(matching.mzs %>%
+                    select(npeaks:isotopes) %>%
+                    select(-isotopes) %>%
+                    summarise_all(sum, na.rm = T))
+    }else{
+      condensed.ion <- condensed.ion %>%
+        bind_cols(matching.mzs %>%
+                    summarise_at('into', sum))
+    }
+    # not a perfect solution for summarizing string data but can
+    # improve later
+    condensed.ion <- condensed.ion %>%
+      bind_cols(matching.mzs %>%
+                  summarise(isotopes = list(isotopes),
+                  adducts = list(adduct),
+                  psgs = list(psg))) %>%
+    # calculate 2d rts
+      mutate(rt.2d = convert.2drt(rt, mod.time, dead.time),
+           rtmin.2d = convert.2drt(rtmin, mod.time, dead.time),
+           rtmax.2d = convert.2drt(rtmax, mod.time, dead.time)) %>%
+      # Remove redundant ion data
+      distinct(mz, rt, .keep_all = T) %>%
+      # Reorder data
+      select(mz:rtmax,rt.2d:rtmax.2d, everything())
+  #  mz.counter <<- mz.counter + 1
+    return(condensed.ion)
+}
+
+# Function for matching psgs with matched m/zs and/or rts
+matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, parallelized = F,
+                      mod.time = mod.time, dead.time = dead.time){
+  #Sys.sleep(1)
+#   browser()
+  # Get pspectrum data for one pspec
+  pspecgroup = all.pspecs %>%
+    filter(psg == pseudospec)
+
+  # Determine quantitative ion by finding most common max ion in each sample
+  max.ion.vector = apply(getInt(pspecgroup), 2, which.max)
+  # Get the mode max ion's index, use to get the most intense ion
+  max.ion = pspecgroup[getMode(max.ion.vector), 'mz']
+
+  # Calculate m/z tolerance window using ppm.tol
+  mz.window = calc.mz.Window(max.ion, ppm.tol)
+
+  # Find psgs with ions in this m/z window
+  matching.psgs <- all.pspecs %>%
+    filter(mz > mz.window[1] & mz < mz.window[2]) %>%
+    # pull out psg number
+    pull(psg)
+  # Put all matching psgs into one 2D peak group
+  grouped.psgs <- all.pspecs %>%
+    filter(psg %in% matching.psgs)
+  condensed.psg <- NULL
+  # List all m/z's
+  mzs <- grouped.psgs[, 'mz']
+  # Find matching m/z's and add intensities together using matchMzs, above
+  if(parallelized == T){
+    condensed.psg <- do.call(rbind, future_lapply(
+      mzs, matchMzs, all.pspecs = all.pspecs, ppm.tol = ppm.tol,
+      rt.tol = rt.tol, mod.time = mod.time, dead.time = dead.time))
+  }else{
+  condensed.psg <- do.call(rbind, lapply(
+    mzs, matchMzs, all.pspecs = all.pspecs, ppm.tol = ppm.tol,
+    rt.tol = rt.tol, mod.time = mod.time, dead.time = dead.time))
+  }
+  # Remove redundant ions from the psg
+  #browser()
+#  psg.counter.here <- local(psg.counter, count.env)
+#  psg.counter.here <- psg.counter
+  condensed.psg <- condensed.psg %>%
+    distinct(mz, rt, .keep_all = T) %>%
+    mutate('psg.2d' = psg.counter)
+  # Print output message
+  cat(paste0('Adding 2D pspec ', psg.counter, '.\n'))
+  # Add to counter
+  ## Fix this, check if there's a counter already in the df and add to it
+  ## should get around the parallel problem.
+  ## can't access pspec.2D from here, it won't be formed till apply is done
+  psg.counter <<- psg.counter + 1L
+#  local(psg.counter <- psg.counter.here + 1L, count.env)
+  return(condensed.psg)
+}
 
 #' Plot a 2D Chromatogram
 #'

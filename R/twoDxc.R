@@ -97,7 +97,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
     pspec2D <- do.call(rbind, lapply(
       psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
       parallelized = parallelized,
-      mod.time = mod.time, dead.time = dead.time))
+      mod.time = mod.time, dead.time = dead.time, rt.tol = rt.tol))
     # Might change to using furrr and purrr
 #    pspec2D <- do.call(rbind, map(
 #      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))
@@ -135,7 +135,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 
   # Print output message showing how many pspecs were grouped
   cat('Grouped', length(unique(new.object@pspec2D$psg.2d)), '2D pseudospectra\n')
-  # Remove global vars
+  # Remove global vars, find a better way to do this
   rm(psg.counter, pos = 1L)
   # Return object
   return(new.object)
@@ -212,7 +212,7 @@ matchMzs <- function(grouped.psg.mz, all.pspecs, ppm.tol, rt.tol,
 }
 
 # Function for matching psgs with matched m/zs and/or rts
-matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, parallelized = F,
+matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, parallelized = F,
                       mod.time = mod.time, dead.time = dead.time){
   #Sys.sleep(1)
 #   browser()

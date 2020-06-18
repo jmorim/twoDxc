@@ -52,6 +52,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   # Function for matching mzs with apply loop
   # Not sure if it's bad to put a function in a function
   matchMzs <- function(grouped.psg.mz, all.pspecs, ppm.tol, rt.tol){
+      Sys.sleep(1)
       # Calculate the m/z range with ppm.tol
       mz.range = calc.mz.Window(grouped.psg.mz, ppm.tol)
       # Get the 1DRT
@@ -73,7 +74,8 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
                     summarise(mzmin = min(mzmin)),
                   matching.mzs %>%
                     summarise(mzmax = max(mzmax)),
-                  # Take RT from most intense peak modulation (max in 1D direction)
+                  # Take RT from most intense peak modulation
+                  # (max in 1D direction)
                   matching.mzs %>%
                     summarise(rt = matching.mzs[which(
                       getInt(matching.mzs) ==
@@ -118,6 +120,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 
   # Function for matching psgs with matched m/zs and/or rts
   matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, parallelized = F){
+    #Sys.sleep(1)
     # Get pspectrum data for one pspec
     pspecgroup = all.pspecs %>%
       filter(psg == pseudospec)
@@ -151,13 +154,18 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
       rt.tol = rt.tol))
     }
     # Remove redundant ions from the psg
+    #browser()
     condensed.psg <- condensed.psg %>%
       distinct(mz, rt, .keep_all = T) %>%
       mutate('psg.2d' = psg.counter)
+#    print(condensed.psg)
     # Print output message
     cat(paste0('Adding 2D pspec ', psg.counter, '.\n'))
     # Add to counter
-    psg.counter <<- psg.counter + 1
+    ## Fix this, check if there's a counter already in the df and add to it
+    ## should get around the parallel problem.
+    ## can't access pspec.2D from here, it won't be formed till apply is done
+    psg.counter <<- psg.counter + 1L
     return(condensed.psg)
   }
 
@@ -179,7 +187,8 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   pspec2D <- list()
   # Don't really need an m/z counter at the moment
  # mz.counter <<- 1
-  psg.counter <- 1
+#  psg.counter <<- 1
+  psg.counter <- 1L
 #  mod.time <- mod.time
 #  dead.time <- dead.time
 
@@ -192,21 +201,25 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
     parallelized = F
   }
   # For each psg, use the function matchPsgs, see below
-  if(parallelized == T){
-    pspec2D <- do.call(rbind, future_lapply(
-      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
-      parallelized = T))
-    # Might change to using furrr and purrr
-#    pspec2D <- do.call(rbind, future_map(
-#      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20,
+  ########
+  # Parallel procecssing for psgs not supported yet because I don't know
+  # how to set counters for parallel processes
+#  if(parallelized == T){
+#    pspec2D <- do.call(rbind, future_lapply(
+#      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
 #      parallelized = T))
-  }else{
+    # Might change to using furrr and purrr
+##    pspec2D <- do.call(rbind, future_map(
+##      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20,
+##      parallelized = T))
+#  }else{
     pspec2D <- do.call(rbind, lapply(
-      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol))
+      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
+      parallelized = parallelized))
     # Might change to using furrr and purrr
 #    pspec2D <- do.call(rbind, map(
 #      psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = 20))
-  }
+#  }
 
   # Remove redundant pspecs (ones with same m/z and rt)
   # This is only problematic with co-eluting isomers, in which case there's

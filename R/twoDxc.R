@@ -232,7 +232,7 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
                       parallelized = F,
                       mod.time = mod.time, dead.time = dead.time){
   #Sys.sleep(1)
-#  if(psg.counter == 8){
+#  if(psg.counter == 21){
 #    browser()
 #  }
 #   browser()
@@ -479,6 +479,8 @@ getInt <- function(x){
 # Used to pick the quantitative ion in a pseudospectrum
 getMode <- function(x){
   u <- unique(x)
+  # Remove 0s
+  u <- u[u!=0]
   mode <- u[which.max(tabulate(match(x, u)))]
   mode <- unlist(mode)
   return(mode)

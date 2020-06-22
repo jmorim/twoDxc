@@ -138,10 +138,9 @@ plotPsSpectrum(xsaFA.multi, pspec = 1, maxlabel = 5)
 
 # group2D on multiple samples
 ```{r}
-library(tictoc)
-tic()
+timer <- proc.time()
 xsa2D.multi <- group2D(xsaFA.multi, 60, 30)
-toc()
+proc.time() - timer
 ```
 # Parallelization
 
@@ -150,9 +149,9 @@ should demonstrate an improvement in processing time when data are grouped in
 parallel.
 ```{r}
 plan(multiprocess)
-tic()
+timer <- proc.time()
 xsa2D.multi.p <- group2D(xsaFA.multi, 60, 30, parallelized = T)
-toc()
+proc.time() - timer
 ```
 
 

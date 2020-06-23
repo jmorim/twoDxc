@@ -465,10 +465,10 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
 # Function to get intensities from pseudospectrum
 # Need to modify to take intensities from single sample datasets
 getInt <- function(x){
-  if("npeaks" %in% colnames(x)){
-    int.mat <- x %>%
+  if("npeaks" %in% colnames(x) | "npeaks" %in% names(x)){
+    int.mat <- as.data.frame(x) %>%
       select(matches('X\\d'))
-  }else{
+    }else{
     int.mat <- x %>%
       select(into)
   }
@@ -488,6 +488,9 @@ getMode <- function(x){
 
 # Get quantitative (main) ion by intensity
 getQuantIon <- function(x){
+  if(nrow(x) == 1){
+    return(x[, 'mz'])
+  }
   q.ion <- x[which(getInt(x) == max(getInt(x), na.rm = T), arr.ind = T)[1],
             'mz']
   return(q.ion)

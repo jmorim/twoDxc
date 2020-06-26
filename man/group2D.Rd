@@ -8,7 +8,8 @@ group2D(
   object,
   mod.time,
   dead.time = 0,
-  rt.tol = 5,
+  rt.tol = 180,
+  rt2.tol = 5,
   ppm.tol = 20,
   parallelized = F
 )
@@ -24,7 +25,7 @@ to 0}
 
 \item{rt.tol}{The grouping tolerance in the RT dimension}
 
-\item{ppm.tol}{The grouping tolerance in the m/z direction}
+\item{ppm.tol}{The grouping tolerance in the m/z dimension}
 
 \item{parallelized}{If true, runs grouping in parallel. Requires the future
 package}

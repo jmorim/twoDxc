@@ -17,7 +17,8 @@ plot2D(
   save.output = F,
   filename = "2dplot.png",
   filepath = ".",
-  print.output = T
+  print.output = T,
+  mz.digits = 4
 )
 }
 \arguments{
@@ -54,6 +55,9 @@ FALSE}
 \item{filepath}{Where to save the output file. Default is '.'}
 
 \item{print.output}{Whether to show the plot output. Default is TRUE}
+
+\item{mz.digits}{The number of digits after the decimal to show for m/z's
+in the plot title. Default is 4}
 }
 \value{
 A 2-dimensional plot

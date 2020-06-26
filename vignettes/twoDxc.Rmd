@@ -1,38 +1,48 @@
 ---
-title: "2D chromatographic data analysis with twoDxc"
-output: rmarkdown::html_vignette
+title: "2D chromatographic data analysis with `twoDxc`"
+output:
+  BiocStyle::html_document:
+    toc_float: true
 vignette: >
-  %\VignetteIndexEntry{2D chromatographic data analysis with twoDxc}
+  %\VignetteIndexEntry{2D chromatographic data analysis with `twoDxc`}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+  %\VignetteDepends{xcms, CAMERA, future.apply, twoDxc}
   %\VignettePackage{twoDxc}
   %\VignetteKeywords{mass spectrometry, chromatography, 2D}
+bibliography: references.bib
+csl: biomed-central.csl
 ---
 
-```{r, include = FALSE}
+```{r global_opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  fig.width = 8, fig.height = 4.5, fig.align = 'center',
+  message = FALSE
 )
+BiocStyle::markdown()
 ```
 
 # Introduction
 
-This vignette demonstrates tools provided by twoDxc for analyzing
+This vignette demonstrates tools provided by `twoDxc` for analyzing
 two-dimensional (2D) chromatography/mass spectrometry (MS) data. This package 
 relies on `xcms` and `CAMERA` to read and process MS data.
 
 # Data import
 
-The example data file used will be an LCxLC/MS run using a quadrupole-time-of-
-flight (QTOF) MS. The sample analyzed was a tea leaf extraction for a
-metabolomics study. The modulation time for the run was 60 seconds with an
-approximately 30 seconds before 2D valve modulation began, specified as the dead
-time.
-```{r setup}
+The example data file used will be an LC$\times$LC/MS run using a
+quadrupole-time-of-flight (QTOF) MS. The sample analyzed was a tea leaf
+extraction for a metabolomics study. The modulation time for the run was 60
+seconds with approximately 30 seconds before 2D valve modulation began,
+specified as the dead time. Mass spectra were acquired at 2 Hz from 100 - 1700
+*m/z*.
+```{r setup, message = FALSE, results = 'hide'}
 library(twoDxc)
 library(dplyr)
 library(future.apply)
+library(ggplot2)
 
 tea.file <- system.file('tea_data', 'tea_pool_1.mzML', package = 'twoDxc')
 
@@ -44,24 +54,28 @@ tea.data <- readMSData(tea.file, mode = 'onDisk')
 2D chromatographic data can be processed the same as 1D data, except each
 compound can appear in multiple consecutive modulations. Below, the base peak
 chromatogram is plotted as if the data were 1D.
-```{r}
+```{r bpi}
 tea.bpi <- chromatogram(tea.data, aggregationFun = 'max')
 plot(tea.bpi)
 ```
 
-The sawtooth pattern in the data is from the gradient separation performed at
-fast, ultra high pressure conditions. At least two peaks from caffeine elute in
-the modulations around 2700 seconds. The extracted ion chromatogram (EIC) for
-caffeine can also be plotted to show multiple peaks per compound. `twoDxc` 
-provides a function for calculating _m/z_ ranges given a parts-per-million (ppm)
-tolerance. The MS used to acquire this data has a tolerance of 20 ppm.
-```{r}
-mz.range.195 <- calc.mz.Window(195.0880, 20)
-eic.195 <- chromatogram(tea.data, mz = mz.range.195, rt = c(2500, 4000))
+The chromatogram's sawtooth pattern arises from the gradient separations performed at
+fast, ultra high pressure conditions. We can see that at least two peaks from 
+caffeine elute in the modulations around 2700 seconds. The extracted ion 
+chromatogram (EIC) for caffeine can also be plotted to show multiple peaks per 
+compound. `twoDxc` provides a function for calculating _m/z_ ranges given a 
+parts-per-million (ppm) tolerance. The MS used to acquire this data has a 
+tolerance of 20 ppm. Note the retention time range in the plot is adjusted.
+```{r eic}
+mz.range.195 <- calc.mz.Window(195.0882, 20)
+# m/z tolerance window for caffeine's accurate mass is:
+print(mz.range.195)
+eic.195 <- chromatogram(tea.data, mz = mz.range.195, rt = c(2500, 3000))
 plot(eic.195)
 ```
-Now peak detection will be performed on the data as if it were 1D.
-```{r}
+
+Now peak detection will be performed on the data as if it were 1D with `xcms`.
+```{r peak_finding, fig.width = 8, fig.height = 8}
 cwp <- CentWaveParam(snthresh = 100, peakwidth = c(6, 15),
                      prefilter = c(5, 1000))
 tea.peaks <- findChromPeaks(tea.data %>%
@@ -72,18 +86,20 @@ pdp <- PeakDensityParam(sampleGroups = 1, minFraction = 1, bw = 3)
 tea.peaks <- groupChromPeaks(tea.peaks, pdp)
 
 feature.chroms <- featureChromatograms(tea.peaks, features = 1:4)
+par(mar = rep(2, 4))
 plot(feature.chroms)
 ```
+
 Notice the same ions are found about 60 seconds apart.
 
 # CAMERA annotation
 
 We will now group ions into pseudospectra using the CAMERA package.
-```{r}
+```{r CAMERA_annotation}
 tea.xsa <- xsAnnotate(as(tea.peaks, 'xcmsSet'))
 # Group by fwhm
 tea.xsaF <- groupFWHM(tea.xsa, perfwhm = 0.6)
-# Label isotopes / Doesn't work for some reason
+# Label isotopes
 tea.xsaI <- findIsotopes(tea.xsaF, mzabs = 0.01)
 # Group by correlation
 tea.xsaC <- groupCorr(tea.xsaF)
@@ -93,17 +109,38 @@ tea.xsaFA <- findAdducts(tea.xsaC, polarity = 'positive')
 plotPsSpectrum(tea.xsaFA, pspec = c(1:4), maxlabel = 5)
 ```
 Three of the first four pspectra are 60 seconds apart from each other and
-exhibit similar spectra. We will use twoDxc to group these spectra together.
-```{r}
+exhibit similar spectra. 
+
+We will use `twoDxc` to group these spectra together. The
+`group2D` function takes its arguments as: 1) the xsAnnotate object, 2) the
+modulation time for the comprehensive 2D run, and 3) the dead time, or where the
+time at which modulations start, to adjust the 2D retention time.
+
+The algorithm groups features by their *m/z*, 1D RT, and 2D RT, with default
+tolerances of 20 ppm, 3 minutes, and 5 seconds, respectively. Matching features
+are grouped into one psg.2d group and their intensities summed. This way, we can
+make more accurate comparisons between different phenotypes and cut down on
+redundant features.
+```{r 2D_grouping}
+filter.Ion <- function(pspectra, ion, ppm = 20){
+  ion.range <- calc.mz.Window(ion, ppm)
+  filtered.pspectra <- as.data.frame(pspectra) %>%
+    filter(mz > ion.range[1] & mz < ion.range[2])
+  return(filtered.pspectra)
+}
+
+print(getpspectra(tea.xsaFA, grp = c(1:10)) %>%
+        filter.Ion(195.0882))
 tea.xsa2D <- group2D(tea.xsaFA, 60, 30)
-print(tea.xsa2D@pspec2D)
+print(tea.xsa2D@pspec2D %>%
+  filter.Ion(195.0882))
 ```
-# Multiple sample processing.
+# Multiple sample processing
 Below follows the sample sample processing steps but for three replicates of
 the tea extraction.
 
-XCMS parts.
-```{r}
+## XCMS parts.
+```{r multiple_xcms}
 teas.files <- dir(system.file('tea_data', package = 'twoDxc'),
                  full.names = T)[1:3]
 teas.group.info <- data.frame(sample_name = sub(basename(teas.files),
@@ -125,8 +162,8 @@ pdp.multi <- PeakDensityParam(sampleGroups = teas.data$sample_group,
 xchr.multi <- groupChromPeaks(xchr.multi, param = pdp.multi)
 xchr.multi <- fillChromPeaks(xchr.multi)
 ```
-CAMERA parts.
-```{r}
+## CAMERA parts.
+```{r multiple_annotation}
 xsa.multi <- xsAnnotate(as(xchr.multi, 'xcmsSet'))
 xsaF.multi <- groupFWHM(xsa.multi, perfwhm = 0.6)
 xsaI.multi <- findIsotopes(xsaF.multi)
@@ -136,37 +173,50 @@ plotPsSpectrum(xsaFA.multi, pspec = 1, maxlabel = 5)
 ```
 
 
-# group2D on multiple samples
-```{r}
+## `group2D` on multiple samples
+```{r serial_processing}
 timer <- proc.time()
 xsa2D.multi <- group2D(xsaFA.multi, 60, 30)
 proc.time() - timer
 ```
 # Parallelization
 
-group2D can run in parallel if `future.apply` is installed. The below block
+`group2D` can run in parallel if `future.apply` is installed. The below block
 should demonstrate an improvement in processing time when data are grouped in
 parallel.
-```{r}
+```{r parallel_processing}
 plan(multiprocess)
 timer <- proc.time()
 xsa2D.multi.p <- group2D(xsaFA.multi, 60, 30, parallelized = T)
 proc.time() - timer
+identical(xsa2D.multi, xsa2D.multi.p)
 ```
-
 
 # Plotting 2D data
 
 Visualizing 2D chromatography data is easier as a heatmap plot, in which
 the x-axis shows 1D RT, the y-axis shows 2D RT, and the z-axis (color) shows ion
 intensity.
-```{r}
+```{r TIC_plot}
 plot2D(tea.data, file = 1, 60, 30)
 ```
 Because the total ion chromatogram (TIC) is a combination of intensities of all
 ion channels, this information underrepresents the chemical diversity in this
 metabolomics sample. Below is an example of an extracted ion chromatogram (EIC)
 for ion 195, representing caffeine.
-```{r}
+```{r EIC_plot}
 plot2D(tea.data, file = 1, mod.time = 60, dead.time = 30, ion = 195.0882)
 ```
+
+It may be useful to iterate through the m/z acquisition range and generate
+EICs for each ion. The example code below would do so for m/z range 100 to 108. The upper range for the loop can be adjusted to the max *m/z* recorded.
+
+```{r eic_loop}
+data.mz.range <- c(round(min(tea.data@featureData@data$lowMZ)):108)
+eics.2d <- lapply(data.mz.range, function(x){
+  plot2D(tea.data, file = 1, mod.time = 60, dead.time = 30, ion = x,
+         mz.tol = 'abs', save.output = F)
+})
+```
+
+# References

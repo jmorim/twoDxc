@@ -39,11 +39,13 @@ setClass('xsAnnotate2D',
 #' @return An xsAnnotate2D object with the added pspec2D slot
 #' @export
 setGeneric('group2D', function(object, mod.time, dead.time = 0, rt.tol = 180,
-                               rt2.tol = 5, ppm.tol = 20, parallelized = F)
+                               rt2.tol = 5, ppm.tol = 20, parallelized = F,
+                               verbose = F)
   standardGeneric('group2D'))
 setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
                                              rt.tol = 180, rt2.tol = 5,
-                                            ppm.tol = 20, parallelized = F){
+                                            ppm.tol = 20, parallelized = F,
+                                            verbose = F){
   if (class(object) != 'xsAnnotate'){
     stop('Error: not an xsAnnotate object')
   }
@@ -96,7 +98,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 #  }else{
     pspec2D <- do.call(rbind, lapply(
       psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
-      parallelized = parallelized,
+      parallelized = parallelized, verbose = verbose,
       mod.time = mod.time, dead.time = dead.time, rt.tol = rt.tol,
       rt2.tol = rt2.tol))
     # Might change to using furrr and purrr
@@ -107,6 +109,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   # Remove redundant pspecs (ones with same m/z and rt)
   # This is only problematic with co-eluting isomers, in which case there's
   # nothing you can do anyway.
+  cat('Added ', nrow(pspec2D), ' spectra\n')
   cat('Condensing...\n')
   pspec2D.distinct <- pspec2D %>%
     distinct(mz, rt, .keep_all = T)
@@ -229,7 +232,7 @@ matchMzs <- function(mzRt, grouped.psg.rt, all.pspecs,
 
 # Function for matching psgs with matched m/zs and/or rts
 matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
-                      parallelized = F,
+                      parallelized = F, verbose = F,
                       mod.time = mod.time, dead.time = dead.time){
   #Sys.sleep(1)
 #  if(psg.counter == 21){
@@ -300,7 +303,9 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
     distinct(mz, rt, .keep_all = T) %>%
     mutate('psg.2d' = psg.counter)
   # Print output message
-  cat(paste0('Adding 2D pspec ', psg.counter, '.\n'))
+  if(verbose == T){
+    cat(paste0('Adding 2D pspec ', psg.counter, '.\n'))
+  }
   # Add to counter
   ## Fix this, check if there's a counter already in the df and add to it
   ## should get around the parallel problem.
@@ -464,6 +469,7 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
 
 # Function to get intensities from pseudospectrum
 # Need to modify to take intensities from single sample datasets
+#' @export
 getInt <- function(x){
   if("npeaks" %in% colnames(x) | "npeaks" %in% names(x)){
     int.mat <- as.data.frame(x) %>%
@@ -487,6 +493,7 @@ getMode <- function(x){
 }
 
 # Get quantitative (main) ion by intensity
+#' @export
 getQuantIon <- function(x){
   if(nrow(x) == 1){
     return(x[, 'mz'])

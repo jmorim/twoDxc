@@ -12,6 +12,9 @@ vignette: >
   %\VignetteKeywords{mass spectrometry, chromatography, 2D}
 bibliography: references.bib
 csl: biomed-central.csl
+nocite: |
+  @article{Tautenhahn:2008fx}, @article{Smith:2006ic},
+  @article{doi:10.1021/ac20450g}
 ---
 
 ```{r global_opts, include = FALSE}

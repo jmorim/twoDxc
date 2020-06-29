@@ -13,11 +13,14 @@ vignette: >
 bibliography: references.bib
 csl: biomed-central.csl
 nocite: |
-  @article{Tautenhahn:2008fx}, @article{Smith:2006ic},
-  @article{doi:10.1021/ac20450g}
+  @item1, @item2, @item3
+#  @article{Tautenhahn:2008fx}, @article{Smith:2006ic},
+#  @article{doi:10.1021/ac20450g}
 ---
 
 ```{r global_opts, include = FALSE}
+library(BiocStyle)
+library(pander)
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -78,7 +81,7 @@ plot(eic.195)
 ```
 
 Now peak detection will be performed on the data as if it were 1D with `xcms`.
-```{r peak_finding, fig.width = 8, fig.height = 8}
+```{r peak_finding, fig.width = 8, fig.height = 8, cache = TRUE}
 cwp <- CentWaveParam(snthresh = 100, peakwidth = c(6, 15),
                      prefilter = c(5, 1000))
 tea.peaks <- findChromPeaks(tea.data %>%
@@ -124,7 +127,7 @@ tolerances of 20 ppm, 3 minutes, and 5 seconds, respectively. Matching features
 are grouped into one psg.2d group and their intensities summed. This way, we can
 make more accurate comparisons between different phenotypes and cut down on
 redundant features.
-```{r 2D_grouping}
+```{r 2D_grouping, cache = TRUE}
 filter.Ion <- function(pspectra, ion, ppm = 20){
   ion.range <- calc.mz.Window(ion, ppm)
   filtered.pspectra <- as.data.frame(pspectra) %>%
@@ -177,7 +180,7 @@ plotPsSpectrum(xsaFA.multi, pspec = 1, maxlabel = 5)
 
 
 ## `group2D` on multiple samples
-```{r serial_processing}
+```{r serial_processing, cache = TRUE}
 timer <- proc.time()
 xsa2D.multi <- group2D(xsaFA.multi, 60, 30)
 proc.time() - timer
@@ -187,7 +190,7 @@ proc.time() - timer
 `group2D` can run in parallel if `future.apply` is installed. The below block
 should demonstrate an improvement in processing time when data are grouped in
 parallel.
-```{r parallel_processing}
+```{r parallel_processing, cache = TRUE}
 plan(multiprocess)
 timer <- proc.time()
 xsa2D.multi.p <- group2D(xsaFA.multi, 60, 30, parallelized = T)

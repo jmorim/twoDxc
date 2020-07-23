@@ -110,7 +110,8 @@ tea.xsaI <- findIsotopes(tea.xsaF, mzabs = 0.01)
 # Group by correlation
 tea.xsaC <- groupCorr(tea.xsaF)
 # Find adducts
-tea.xsaFA <- findAdducts(tea.xsaC, polarity = 'positive')
+tea.xsaFA <- findAdducts(tea.xsaC, polarity = 'positive',
+                         ppm = 25, intval = 'into')
 # Plot example spectrum
 plotPsSpectrum(tea.xsaFA, pspec = c(1:4), maxlabel = 5)
 ```
@@ -167,6 +168,8 @@ pdp.multi <- PeakDensityParam(sampleGroups = teas.data$sample_group,
                               minFraction = (2/3), bw = 3)
 xchr.multi <- groupChromPeaks(xchr.multi, param = pdp.multi)
 xchr.multi <- fillChromPeaks(xchr.multi)
+
+feature.chroms.multi <- featureChromatograms(xchr.multi, features = 1:4)
 ```
 ## CAMERA parts.
 ```{r multiple_annotation}

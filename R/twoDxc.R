@@ -36,16 +36,19 @@ setClass('xsAnnotate2D',
 #' @param ppm.tol The grouping tolerance in the m/z dimension
 #' @param parallelized If true, runs grouping in parallel. Requires the future
 #'          package
+#' @param tail.fix If true, corrects for erroneous grouping when prevalent
+#'   compounds tail in the first dimension
+#'
 #' @return An xsAnnotate2D object with the added pspec2D slot
 #' @export
 setGeneric('group2D', function(object, mod.time, dead.time = 0, rt.tol = 180,
                                rt2.tol = 5, ppm.tol = 20, parallelized = F,
-                               verbose = F)
+                               tail.fix = F, verbose = F)
   standardGeneric('group2D'))
 setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
                                              rt.tol = 180, rt2.tol = 5,
                                             ppm.tol = 20, parallelized = F,
-                                            verbose = F){
+                                            tail.fix = F, verbose = F){
   if (class(object) != 'xsAnnotate'){
     stop('Error: not an xsAnnotate object')
   }
@@ -137,12 +140,42 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   # Set the object's pspec2D slot
   new.object@pspec2D <- pspec2D.distinct
 
-  # Print output message showing how many pspecs were grouped
-  cat('Grouped', length(unique(new.object@pspec2D$psg.2d)), '2D pseudospectra\n')
+#  # Print output message showing how many pspecs were grouped
+#  cat('Grouped', length(unique(new.object@pspec2D$psg.2d)), '2D pseudospectra\n')
   # Remove global vars, find a better way to do this
   rm(psg.counter, pos = 1L)
+
+  if(tail.fix == T){
+    new.pspecs <- data.frame()
+    for(i in 1:nrow(new.object@pspec2D)){
+      mz = new.object@pspec2D[i, 'mz']
+      rt = new.object@pspec2D[i, 'rt']
+      rt.2d = new.object@pspec2D[i, 'rt.2d']
+      x.vec = c(mz, rt, rt.2d)
+      # Look for rows within mz, rt, and rt.2 limits
+      dup.psgs <-new.object@pspec2D %>%
+        filter(near(mz, x.vec[1], tol = x.vec[1] * ppm.tol / 10^6),
+               near(rt, x.vec[2], tol = rt.tol),
+               near(rt.2d, x.vec[3], tol = rt2.tol))
+      # Pick the integration with max signal
+      psg.int <- getInt(dup.psgs)
+      total.psg <- psg.int %>%
+        replace(is.na(.), 0) %>%
+        mutate(total = rowSums(.))
+      max.psg <- which.max(total.psg$total)
+      # Add max psg integration to new df
+      new.pspecs <- rbind(new.pspecs, dup.psgs[max.psg,])
+    }
+    new.object@pspec2D <- new.pspecs
+    # Print output message showing how many pspecs were grouped
+    cat('Grouped', length(unique(new.object@pspec2D$psg.2d)), '2D pseudospectra\n')
+    return(new.object)
+  }else{
+  # Print output message showing how many pspecs were grouped
+  cat('Grouped', length(unique(new.object@pspec2D$psg.2d)), '2D pseudospectra\n')
   # Return object
   return(new.object)
+  }
 })
 
 # Function for matching mzs with apply loop
@@ -151,7 +184,11 @@ matchMzs <- function(mzRt, grouped.psg.rt, all.pspecs,
                      ppm.tol, rt.tol, rt2.tol,
                      mod.time = mod.time, dead.time = dead.time){
     # Get m/z and RT data
+  range.195 = calc.mz.Window(195.0880, 25)
     mz <- mzRt[1]
+#    if(mz > range.195[1] & mz < range.195[2]){
+#      browser()
+#    }
     rt <- mzRt[2]
     # Calculate the m/z range with ppm.tol
     mz.range <- calc.mz.Window(mz, ppm.tol)
@@ -209,6 +246,7 @@ matchMzs <- function(mzRt, grouped.psg.rt, all.pspecs,
         bind_cols(matching.mzs %>%
                     select(npeaks:isotopes) %>%
                     select(-isotopes) %>%
+                    select(-ms_level) %>%
                     summarise_all(sum, na.rm = T))
     }else{
       condensed.ion <- condensed.ion %>%

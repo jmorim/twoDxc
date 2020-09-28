@@ -11,7 +11,9 @@ group2D(
   rt.tol = 180,
   rt2.tol = 5,
   ppm.tol = 20,
-  parallelized = F
+  parallelized = F,
+  tail.fix = F,
+  verbose = F
 )
 }
 \arguments{
@@ -29,6 +31,9 @@ to 0}
 
 \item{parallelized}{If true, runs grouping in parallel. Requires the future
 package}
+
+\item{tail.fix}{If true, corrects for erroneous grouping when prevalent
+compounds tail in the first dimension}
 }
 \value{
 An xsAnnotate2D object with the added pspec2D slot

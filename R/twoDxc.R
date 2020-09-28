@@ -166,6 +166,8 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
       # Add max psg integration to new df
       new.pspecs <- rbind(new.pspecs, dup.psgs[max.psg,])
     }
+    new.pspecs <- new.pspecs %>%
+      distinct(mz, rt, rt.2d, .keep_all = T)
     new.object@pspec2D <- new.pspecs
     # Print output message showing how many pspecs were grouped
     cat('Grouped', length(unique(new.object@pspec2D$psg.2d)), '2D pseudospectra\n')

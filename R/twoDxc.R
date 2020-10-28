@@ -524,9 +524,9 @@ setMethod('plot2D', 'MSnExp', function(object,
     if(missing(ion) & filename == '2dplot'){
       ggsave(paste0(filename, filetype), plot = plot.2d, path = filepath)
     }else{
-      filename <- paste0(unlist(strsplit(filename, '.png')), '_file_', file,
+      filename <- paste0(filename, '_file_', file,
                          '_', ion, filetype)
-      ggsave(paste0(filename, filetype), plot = plot.2d, path = filepath)
+      ggsave(paste0(filename), plot = plot.2d, path = filepath)
     }
   }
   if(print.output == T){

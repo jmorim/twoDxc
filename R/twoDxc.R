@@ -386,24 +386,44 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
 #'          in the plot title. Default is 4
 #' @return A 2-dimensional plot
 #' @export
-setGeneric('plot2D', function(object, file = 1, mod.time, delay.time = 0, ion,
-                              mz.tol = c('ppm', 'abs'), ppm.tol = 20,
-                              abs.tol = 0.5, log.scale = F,
+setGeneric('plot2D', function(object,
+                              file = 1,
+                              mod.time,
+                              delay.time = 0,
+                              ion,
+                              mz.tol = c('ppm', 'abs'),
+                              ppm.tol = 20,
+                              abs.tol = 0.5,
+                              log.scale = F,
                               rt.min = 0,
                               rt.max = max(
-                                object@featureData@data$retentionTime)
-                              save.output = F, filename = '2dplot.png',
-                              filepath = '.', print.output = T, mz.digits = 4)
+                                object@featureData@data$retentionTime),
+                              save.output = F,
+                              filename = '2dplot',
+                              filetype = '.pdf',
+                              filepath = '.',
+                              print.output = T,
+                              mz.digits = 4)
   standardGeneric('plot2D'))
 
-setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
+setMethod('plot2D', 'MSnExp', function(object,
+                                       file = 1,
+                                       mod.time,
                                        delay.time = 0,
-                                       ion, mz.tol = c('ppm', 'abs'),
-                                       ppm.tol = 20, abs.tol = 0.5,
+                                       ion,
+                                       mz.tol = c('ppm', 'abs'),
+                                       ppm.tol = 20,
+                                       abs.tol = 0.5,
                                        log.scale = F,
-                                       save.output = F, filename = '2dplot.png',
+                                       rt.min = 0,
+                                       rt.max = max(
+                                         object@featureData@data$retentionTime),
+                                       save.output = F,
+                                       filename = '2dplot',
+                                       filetype = '.pdf',
                                        filepath = '.',
-                                       print.output = T, mz.digits = 4){
+                                       print.output = T,
+                                       mz.digits = 4){
   ###
   # Is there a better way to select first element in list as default arg?
   mz.tol <- mz.tol[1]
@@ -489,6 +509,7 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
       scale_fill_distiller(palette = 'Spectral', direction = -1) +
       xlab('1D Retention Time (s)') +
       ylab('2D Retention Time (s)') +
+      xlim(rt.min, rt.max) +
       ggtitle(
         if(missing(ion)){
           paste0('TIC: File ', file)
@@ -497,13 +518,15 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
                  round(mz.range[2], digits = mz.digits), ', File: ', file)
       }) +
       theme_classic()
+
+  # Save the output
   if(save.output == T){
-    if(missing(ion) & filename == '2dplot.png'){
-      ggsave(filename, plot = plot.2d, path = filepath)
+    if(missing(ion) & filename == '2dplot'){
+      ggsave(paste0(filename, filetype), plot = plot.2d, path = filepath)
     }else{
       filename <- paste0(unlist(strsplit(filename, '.png')), '_file_', file,
-                         '_', ion, '.png')
-      ggsave(filename, plot = plot.2d, path = filepath)
+                         '_', ion, filetype)
+      ggsave(paste0(filename, filetype), plot = plot.2d, path = filepath)
     }
   }
   if(print.output == T){

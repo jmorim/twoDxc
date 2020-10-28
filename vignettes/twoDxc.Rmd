@@ -42,7 +42,7 @@ The example data file used will be an LC$\times$LC/MS run using a
 quadrupole-time-of-flight (QTOF) MS. The sample analyzed was a tea leaf
 extraction for a metabolomics study. The modulation time for the run was 60
 seconds with approximately 30 seconds before 2D valve modulation began,
-specified as the dead time. Mass spectra were acquired at 2 Hz from 100 - 1700
+specified as the delay time. Mass spectra were acquired at 2 Hz from 100 - 1700
 *m/z*.
 ```{r setup, message = FALSE, results = 'hide'}
 library(twoDxc)
@@ -214,7 +214,7 @@ ion channels, this information underrepresents the chemical diversity in this
 metabolomics sample. Below is an example of an extracted ion chromatogram (EIC)
 for ion 195, representing caffeine.
 ```{r EIC_plot}
-plot2D(tea.data, file = 1, mod.time = 60, dead.time = 30, ion = 195.0882)
+plot2D(tea.data, file = 1, mod.time = 60, delay.time = 30, ion = 195.0882)
 ```
 
 It may be useful to iterate through the m/z acquisition range and generate
@@ -223,7 +223,7 @@ EICs for each ion. The example code below would do so for m/z range 100 to 108. 
 ```{r eic_loop}
 data.mz.range <- c(round(min(tea.data@featureData@data$lowMZ)):108)
 eics.2d <- lapply(data.mz.range, function(x){
-  plot2D(tea.data, file = 1, mod.time = 60, dead.time = 30, ion = x,
+  plot2D(tea.data, file = 1, mod.time = 60, delay.time = 30, ion = x,
          mz.tol = 'abs', save.output = F)
 })
 ```

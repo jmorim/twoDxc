@@ -8,14 +8,17 @@ plot2D(
   object,
   file = 1,
   mod.time,
-  dead.time = 0,
-  ion,
+  delay.time = 0,
+  ion = NULL,
   mz.tol = c("ppm", "abs"),
   ppm.tol = 20,
   abs.tol = 0.5,
   log.scale = F,
+  rt.min = 0,
+  rt.max = max(object@featureData@data$retentionTime),
   save.output = F,
-  filename = "2dplot.png",
+  filename = "2dplot",
+  filetype = ".pdf",
   filepath = ".",
   print.output = T,
   mz.digits = 4
@@ -29,7 +32,7 @@ plot2D(
 
 \item{mod.time}{The modulation time of the 2D run}
 
-\item{dead.time}{The time it takes for the injection to reach the detector.
+\item{delay.time}{The time it takes for modulation to start.
 Default is 0.}
 
 \item{ion}{Select an ion to generate an extracted ion chromatogram (EIC). If
@@ -47,10 +50,16 @@ Default is 0.5 m/z}
 \item{log.scale}{Whether intensity coloring should be log scaled. Default is
 FALSE}
 
+\item{rt.min}{Minimum 1D RT to plot. Default is 0}
+
+\item{rt.max}{Maximum 1D RT to plot. Default is the max found in the data}
+
 \item{save.output}{Whether to save the output as a file. Default is FALSE}
 
 \item{filename}{The name for saving the file if desired. Default is
 '2dplot.png' plus the file selected plus the ion selected.}
+
+\item{filetype}{Filetype of the form ".pdf". Default is ".pdf"}
 
 \item{filepath}{Where to save the output file. Default is '.'}
 

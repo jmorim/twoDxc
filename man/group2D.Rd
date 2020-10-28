@@ -7,7 +7,7 @@
 group2D(
   object,
   mod.time,
-  dead.time = 0,
+  delay.time = 0,
   rt.tol = 180,
   rt2.tol = 5,
   ppm.tol = 20,
@@ -22,7 +22,7 @@ grouping}
 
 \item{mod.time}{The modulation time for the comprehensive 2D run}
 
-\item{dead.time}{The time before the injection reaches the detector, defaults
+\item{delay.time}{The time before the injection reaches the detector, defaults
 to 0}
 
 \item{rt.tol}{The grouping tolerance in the RT dimension}

@@ -377,9 +377,12 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
 #'          Default is 0.5 m/z
 #' @param log.scale Whether intensity coloring should be log scaled. Default is
 #'          FALSE
+#' @param rt.min Minimum 1D RT to plot. Default is 0
+#' @param rt.max Maximum 1D RT to plot. Default is the max found in the data
 #' @param save.output Whether to save the output as a file. Default is FALSE
 #' @param filename The name for saving the file if desired. Default is
 #'          '2dplot.png' plus the file selected plus the ion selected.
+#' @param filetype Filetype of the form ".pdf". Default is ".pdf"
 #' @param filepath Where to save the output file. Default is '.'
 #' @param print.output Whether to show the plot output. Default is TRUE
 #' @param mz.digits The number of digits after the decimal to show for m/z's
@@ -503,13 +506,22 @@ setMethod('plot2D', 'MSnExp', function(object,
     plot.2d.df$intensity[is.na(plot.2d.df$intensity)] <- 0
   }
 
+  # Trim data to xlims since xlims isn't working in ggplot
+  plot.2d.df = cbind(plot.2d.df, rt.adj, rt.2d.adj)
+  plot.2d.df = plot.2d.df %>%
+    filter(rt >= rt.min & rt <= rt.max)
+
   # plot function
     plot.2d <- ggplot(plot.2d.df, aes(x = rt.adj, y = rt.2d.adj)) +
-      geom_raster(aes(fill = intensity), interpolate = T) +
+      geom_raster(aes(fill = intensity), interpolate = T, na.rm = T) +
+#      scale_x_continuous(NULL, expand = c(0, 0)) +
       scale_fill_distiller(palette = 'Spectral', direction = -1) +
       xlab('1D Retention Time (s)') +
       ylab('2D Retention Time (s)') +
-      xlim(rt.min, rt.max) +
+#      xlim(rt.min, rt.max) +
+      lims(x = c(rt.min, rt.max)) +
+#      coord_cartesian(xlim = c(rt.min, rt.max)) +
+#      rescale(xlim = c(rt.min, rt.max)) +
       ggtitle(
         if(missing(ion)){
           paste0('TIC: File ', file)

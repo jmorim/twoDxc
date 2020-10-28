@@ -4,6 +4,6 @@
 troubleshooting/*
 .vscode
 workspace.code-workspace
-./inst/tea_data/tea_pool_1.mzML
-./inst/tea_data/tea_pool_2.mzML
-./inst/tea_data/tea_pool_3.mzML
+inst/tea_data/tea_pool_1.mzML
+inst/tea_data/tea_pool_2.mzML
+inst/tea_data/tea_pool_3.mzML

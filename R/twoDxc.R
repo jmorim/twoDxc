@@ -15,7 +15,7 @@
 setClass('xsAnnotate2D',
          representation(pspec2D = 'list',
                         mod.time = 'numeric',
-                        dead.time = 'numeric'),
+                        delay.time = 'numeric'),
          contains=c('xsAnnotate'))
 
 # Make group2D function
@@ -30,7 +30,7 @@ setClass('xsAnnotate2D',
 #' @param object An xsAnnotate object returned by CAMERA that needs 2D peak
 #'          grouping
 #' @param mod.time The modulation time for the comprehensive 2D run
-#' @param dead.time The time before the injection reaches the detector, defaults
+#' @param delay.time The time before the injection reaches the detector, defaults
 #'          to 0
 #' @param rt.tol The grouping tolerance in the RT dimension
 #' @param ppm.tol The grouping tolerance in the m/z dimension
@@ -41,11 +41,11 @@ setClass('xsAnnotate2D',
 #'
 #' @return An xsAnnotate2D object with the added pspec2D slot
 #' @export
-setGeneric('group2D', function(object, mod.time, dead.time = 0, rt.tol = 180,
+setGeneric('group2D', function(object, mod.time, delay.time = 0, rt.tol = 180,
                                rt2.tol = 5, ppm.tol = 20, parallelized = F,
                                tail.fix = F, verbose = F)
   standardGeneric('group2D'))
-setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
+setMethod('group2D', 'xsAnnotate', function(object, mod.time, delay.time = 0,
                                              rt.tol = 180, rt2.tol = 5,
                                             ppm.tol = 20, parallelized = F,
                                             tail.fix = F, verbose = F){
@@ -56,7 +56,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
   # Convert xsAnnotate to xsAnnotate2D
   new.object <- as(object, 'xsAnnotate2D')
   new.object@mod.time <- mod.time
-  new.object@dead.time <- dead.time
+  new.object@delay.time <- delay.time
 
   # Get all pseudospectra (pspecs) stored in the object
   all.pspectra <- CAMERA::getpspectra(new.object,
@@ -102,7 +102,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
     pspec2D <- do.call(rbind, lapply(
       psgs, matchPsgs, all.pspecs = all.pspectra, ppm.tol = ppm.tol,
       parallelized = parallelized, verbose = verbose,
-      mod.time = mod.time, dead.time = dead.time, rt.tol = rt.tol,
+      mod.time = mod.time, delay.time = delay.time, rt.tol = rt.tol,
       rt2.tol = rt2.tol))
     # Might change to using furrr and purrr
 #    pspec2D <- do.call(rbind, map(
@@ -184,7 +184,7 @@ setMethod('group2D', 'xsAnnotate', function(object, mod.time, dead.time = 0,
 # Not sure if it's bad to put a function in a function
 matchMzs <- function(mzRt, grouped.psg.rt, all.pspecs,
                      ppm.tol, rt.tol, rt2.tol,
-                     mod.time = mod.time, dead.time = dead.time){
+                     mod.time = mod.time, delay.time = delay.time){
     # Get m/z and RT data
   range.195 = calc.mz.Window(195.0880, 25)
     mz <- mzRt[1]
@@ -197,16 +197,16 @@ matchMzs <- function(mzRt, grouped.psg.rt, all.pspecs,
     # Calculate the RT ranges with rt.tol and rt2.tol
     rt.range <- rt + c(-rt.tol, rt.tol)
     rt2.range <- convert.2drt(rt, mod.time = mod.time,
-                              dead.time = dead.time) + c(-rt2.tol, rt2.tol)
+                              delay.time = delay.time) + c(-rt2.tol, rt2.tol)
 
     # Get matching m/z's within tolerance in the other pspectra
     # Add in RT tolerance
     matching.mzs = all.pspecs %>%
       filter(mz > mz.range[1] & mz < mz.range[2]) %>%
       filter(rt > rt.range[1] & rt < rt.range[2]) %>%
-      mutate(rt.2d = convert.2drt(rt, mod.time, dead.time),
-             rtmin.2d = convert.2drt(rtmin, mod.time, dead.time),
-             rtmax.2d = convert.2drt(rtmax, mod.time, dead.time)) %>%
+      mutate(rt.2d = convert.2drt(rt, mod.time, delay.time),
+             rtmin.2d = convert.2drt(rtmin, mod.time, delay.time),
+             rtmax.2d = convert.2drt(rtmax, mod.time, delay.time)) %>%
       filter(rt.2d > rt2.range[1] & rt.2d < rt2.range[2])
     # Initialize matrix for condensed ion data
     condensed.ion = NULL
@@ -273,7 +273,7 @@ matchMzs <- function(mzRt, grouped.psg.rt, all.pspecs,
 # Function for matching psgs with matched m/zs and/or rts
 matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
                       parallelized = F, verbose = F,
-                      mod.time = mod.time, dead.time = dead.time){
+                      mod.time = mod.time, delay.time = delay.time){
   #Sys.sleep(1)
 #  if(psg.counter == 21){
 #    browser()
@@ -295,15 +295,15 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
   # Calculate RT ranges with rt.tol and rt2.tol
   rt.range <- max.ion.rt + c(-rt.tol, rt.tol)
   rt2.range <- convert.2drt(max.ion.rt, mod.time = mod.time,
-                            dead.time = dead.time) + c(-rt2.tol, rt2.tol)
+                            delay.time = delay.time) + c(-rt2.tol, rt2.tol)
 
   # Find psgs with ions in this m/z and RT window
   matching.psgs <- all.pspecs %>%
     filter(mz > mz.window[1] & mz < mz.window[2]) %>%
     filter(rt > rt.range[1] & rt < rt.range[2]) %>%
-    mutate(rt.2d = convert.2drt(rt, mod.time, dead.time),
-           rtmin.2d = convert.2drt(rtmin, mod.time, dead.time),
-           rtmax.2d = convert.2drt(rtmax, mod.time, dead.time)) %>%
+    mutate(rt.2d = convert.2drt(rt, mod.time, delay.time),
+           rtmin.2d = convert.2drt(rtmin, mod.time, delay.time),
+           rtmax.2d = convert.2drt(rtmax, mod.time, delay.time)) %>%
     filter(rt.2d > rt2.range[1] & rt.2d < rt2.range[2]) %>%
     # pull out psg number
     pull(psg)
@@ -323,12 +323,12 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
     condensed.psg <- do.call(rbind, future_apply(
       mzRts, MARGIN = 1, matchMzs, all.pspecs = all.pspecs, ppm.tol = ppm.tol,
       rt.tol = rt.tol, rt2.tol = rt2.tol,
-      mod.time = mod.time, dead.time = dead.time))
+      mod.time = mod.time, delay.time = delay.time))
   }else{
   condensed.psg <- do.call(rbind, apply(
     mzRts, MARGIN = 1, matchMzs, all.pspecs = all.pspecs, ppm.tol = ppm.tol,
     rt.tol = rt.tol, rt2.tol = rt2.tol,
-    mod.time = mod.time, dead.time = dead.time))
+    mod.time = mod.time, delay.time = delay.time))
 #    condensed.psg <- do.call(rbind, pmap(
 #      mzRts, matchMzs, all.pspecs = all.pspecs, ppm.tol = ppm.tol,
 #      rt.tol = rt.tol, rt2.tol = rt2.tol,
@@ -365,7 +365,7 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
 #' @param file Which file (numeric, not filename) to pull data from. Default is
 #'               1
 #' @param mod.time The modulation time of the 2D run
-#' @param dead.time The time it takes for the injection to reach the detector.
+#' @param delay.time The time it takes for modulation to start.
 #'          Default is 0.
 #' @param ion Select an ion to generate an extracted ion chromatogram (EIC). If
 #'          missing, the total ion chromatogram (TIC) is returned.
@@ -386,15 +386,18 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
 #'          in the plot title. Default is 4
 #' @return A 2-dimensional plot
 #' @export
-setGeneric('plot2D', function(object, file = 1, mod.time, dead.time = 0, ion,
+setGeneric('plot2D', function(object, file = 1, mod.time, delay.time = 0, ion,
                               mz.tol = c('ppm', 'abs'), ppm.tol = 20,
                               abs.tol = 0.5, log.scale = F,
+                              rt.min = 0,
+                              rt.max = max(
+                                object@featureData@data$retentionTime)
                               save.output = F, filename = '2dplot.png',
                               filepath = '.', print.output = T, mz.digits = 4)
   standardGeneric('plot2D'))
 
 setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
-                                       dead.time = 0,
+                                       delay.time = 0,
                                        ion, mz.tol = c('ppm', 'abs'),
                                        ppm.tol = 20, abs.tol = 0.5,
                                        log.scale = F,
@@ -417,7 +420,8 @@ setMethod('plot2D', 'MSnExp', function(object, file = 1, mod.time,
   # Get rt vector from data file, includes all retention times
   rt <- filterFile(object, file)@featureData@data$retentionTime
   # Convert these to 2D rts
-  rt.2d <- sapply(rt, convert.2drt, mod.time = mod.time, dead.time = dead.time)
+  rt.2d <- sapply(rt, convert.2drt, mod.time = mod.time,
+                  delay.time = delay.time)
   if(missing(ion)){
     # Get total ion current or extracted ion current if ion specified
     intensity <- object@featureData@data %>%
@@ -554,8 +558,8 @@ calc.mz.Window <- function(mz, ppm){
 
 #' @export
 # Function to calculate 2D RT from the 1D RT
-convert.2drt <- function(rt, mod.time, dead.time = 0) {
-  rt.adj <- rt - dead.time
+convert.2drt <- function(rt, mod.time, delay.time = 0) {
+  rt.adj <- rt - delay.time
   rt.2d <- rt.adj - (mod.time * floor(rt.adj / mod.time))
   return(rt.2d)
 }

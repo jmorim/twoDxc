@@ -390,7 +390,7 @@ setGeneric('plot2D', function(object,
                               file = 1,
                               mod.time,
                               delay.time = 0,
-                              ion,
+                              ion = NULL,
                               mz.tol = c('ppm', 'abs'),
                               ppm.tol = 20,
                               abs.tol = 0.5,
@@ -410,7 +410,7 @@ setMethod('plot2D', 'MSnExp', function(object,
                                        file = 1,
                                        mod.time,
                                        delay.time = 0,
-                                       ion,
+                                       ion = NULL,
                                        mz.tol = c('ppm', 'abs'),
                                        ppm.tol = 20,
                                        abs.tol = 0.5,
@@ -442,7 +442,7 @@ setMethod('plot2D', 'MSnExp', function(object,
   # Convert these to 2D rts
   rt.2d <- sapply(rt, convert.2drt, mod.time = mod.time,
                   delay.time = delay.time)
-  if(missing(ion)){
+  if(is.null(ion)){
     # Get total ion current or extracted ion current if ion specified
     intensity <- object@featureData@data %>%
       filter(fileIdx == file) %>%
@@ -521,7 +521,7 @@ setMethod('plot2D', 'MSnExp', function(object,
 
   # Save the output
   if(save.output == T){
-    if(missing(ion) & filename == '2dplot'){
+    if(is.null(ion) & filename == '2dplot'){
       ggsave(paste0(filename, filetype), plot = plot.2d, path = filepath)
     }else{
       filename <- paste0(filename, '_file_', file,

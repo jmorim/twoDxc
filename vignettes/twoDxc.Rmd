@@ -120,7 +120,7 @@ exhibit similar spectra.
 
 We will use `twoDxc` to group these spectra together. The
 `group2D` function takes its arguments as: 1) the xsAnnotate object, 2) the
-modulation time for the comprehensive 2D run, and 3) the dead time, or where the
+modulation time for the comprehensive 2D run, and 3) the delay time, or where the
 time at which modulations start, to adjust the 2D retention time.
 
 The algorithm groups features by their *m/z*, 1D RT, and 2D RT, with default

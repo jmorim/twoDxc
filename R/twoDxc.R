@@ -401,12 +401,22 @@ setGeneric('plot2D', function(object,
                               rt.min = 0,
                               rt.max = max(
                                 object@featureData@data$retentionTime),
+                              rt2.min = 0,
+                              rt2.max = mod.time,
+                              mz.min = object@featureData$lowMZ,
+                              mz.max = object@featureData$highMZ,
+                              int.min = 0,
+                              int.max = max(
+                                object@featureData@data$totIonCurrent),
+                              color.scale = 'Spectral',
+                              reverse.scale = T,
                               save.output = F,
                               filename = '2dplot',
                               filetype = '.pdf',
                               filepath = '.',
                               print.output = T,
-                              mz.digits = 4)
+                              mz.digits = 4,
+                              plot.type = '2D')
   standardGeneric('plot2D'))
 
 setMethod('plot2D', 'MSnExp', function(object,
@@ -421,12 +431,22 @@ setMethod('plot2D', 'MSnExp', function(object,
                                        rt.min = 0,
                                        rt.max = max(
                                          object@featureData@data$retentionTime),
+                                       rt2.min = 0,
+                                       rt2.max = mod.time,
+                                       mz.min = object@featureData$lowMZ,
+                                       mz.max = object@featureData$highMZ,
+                                       int.min = 0,
+                                       int.max = max(
+                                         object@featureData@data$totIonCurrent),
+                                       color.scale = 'Spectral',
+                                       reverse.scale = T,
                                        save.output = F,
                                        filename = '2dplot',
                                        filetype = '.pdf',
                                        filepath = '.',
                                        print.output = T,
-                                       mz.digits = 4){
+                                       mz.digits = 4,
+                                       plot.type = '2D'){
   ###
   # Is there a better way to select first element in list as default arg?
   mz.tol <- mz.tol[1]
@@ -434,7 +454,7 @@ setMethod('plot2D', 'MSnExp', function(object,
   if(class(object) != 'MSnExp' & class(object) != 'OnDiskMSnExp'){
     stop('Error: not an MSnExp object')
   }
-  if(missing(ion)){
+  if(!is.null(ion)){
     if(mz.tol != 'ppm' & mz.tol != 'abs'){
       stop('Error: Specify ppm or abs for m/z tolerance')
     }
@@ -445,56 +465,98 @@ setMethod('plot2D', 'MSnExp', function(object,
   # Convert these to 2D rts
   rt.2d <- sapply(rt, convert.2drt, mod.time = mod.time,
                   delay.time = delay.time)
+  # if ion not specified
   if(is.null(ion)){
-    # Get total ion current or extracted ion current if ion specified
-    intensity <- object@featureData@data %>%
-      filter(fileIdx == file) %>%
-      pull(totIonCurrent)
-    # Join intensity to rts data
-    plot.2d.df <- as.data.frame(cbind(rt, rt.2d, intensity))
-  }else{
-    if(mz.tol == 'ppm'){
-      mz.range <- calc.mz.Window(ion, ppm.tol)
-    }else{
-      mz.range <- ion + c(-abs.tol, abs.tol)
-    }
-    # filterMz data to get EIC data of structure [file, rt, mz, i]
-    # Suppress warnings because each call to trimMz_Spectrum from filterMz
-    # is very helpful and tells me when a scan has an empty spectrum.
-    suppressWarnings(
-      eic.data <- as.data.frame(filterMz(filterFile(object, file), mz.range))
-    )
-    # Need to change column name 'i' to 'intensity' to match TIC method
-    colnames(eic.data)[4] = 'intensity'
+    # If mz range specified
+    if(mz.min != object@featureData@data$lowMZ ||
+       mz.max != object@featureData@data$highMZ){
+       suppressWarnings(
+         eic.data <- as.data.frame(filterMz(filterFile(object, file),
+                                            c(mz.min, mz.max)))
+       )
+       # Need to change column name 'i' to 'intensity' to match TIC method
+       colnames(eic.data)[4] = 'intensity'
 
-    # Need to smush intensities in cases where there are >1 m/z per rt
-    if(any(duplicated(eic.data$rt)) == T){
-      eic.data <- eic.data %>%
-        group_by(rt) %>%
-        # hopefully this works because it seems to return a goofy table
-        summarise(intensity = sum(intensity))
+       # Need to smush intensities in cases where there are >1 m/z per rt
+       if(any(duplicated(eic.data$rt)) == T){
+         eic.data <- eic.data %>%
+           group_by(rt) %>%
+           # hopefully this works because it seems to return a goofy table
+           summarise(intensity = sum(intensity), .groups = 'drop')
+       }
+       # Make data.frame from rt values like in TIC version
+       plot.2d.df <- as.data.frame(cbind(rt, rt.2d))
+       # Get just the intensity vector for the filtered ions
+       # Join intensity to rts data, filling in rts where there's 0 int
+       plot.2d.df <- plot.2d.df %>%
+         full_join(eic.data, by = 'rt') %>%
+         dplyr::select(rt, rt.2d, intensity)
+      # else it's a TIC
+      ### TIC
+    }else{
+      # Get total ion current or extracted ion current if ion specified
+      intensity <- object@featureData@data %>%
+        filter(fileIdx == file) %>%
+        pull(totIonCurrent)
+      # Join intensity to rts data
+      plot.2d.df <- as.data.frame(cbind(rt, rt.2d, intensity))
     }
-    # Make data.frame from rt values like in TIC version
-    plot.2d.df <- as.data.frame(cbind(rt, rt.2d))
-    # Get just the intensity vector for the filtered ions
-    # Join intensity to rts data, filling in rts where there's 0 int
-    plot.2d.df <- plot.2d.df %>%
-      full_join(eic.data, by = 'rt') %>%
-      select(rt, rt.2d, intensity)
-  }
+    #### TIC
+    # else it's an EIC
+    #### EIC
+    }else{
+      # if tolerance is in ppm
+      ## ppm
+      if(mz.tol == 'ppm'){
+        mz.range <- calc.mz.Window(ion, ppm.tol)
+        ## ppm
+        # else tolerance is abs
+        ## abs
+      }else{
+        mz.range <- ion + c(-abs.tol, abs.tol)
+      }
+      ## abs
+      # filterMz data to get EIC data of structure [file, rt, mz, i]
+      # Suppress warnings because each call to trimMz_Spectrum from filterMz
+      # is very helpful and tells me when a scan has an empty spectrum.
+      suppressWarnings(
+        eic.data <- as.data.frame(filterMz(filterFile(object, file), mz.range))
+      )
+      # Need to change column name 'i' to 'intensity' to match TIC method
+      colnames(eic.data)[4] = 'intensity'
+
+      # Need to smush intensities in cases where there are >1 m/z per rt
+      if(any(duplicated(eic.data$rt)) == T){
+        eic.data <- eic.data %>%
+          group_by(rt) %>%
+          # hopefully this works because it seems to return a goofy table
+          summarise(intensity = sum(intensity), .groups = 'drop')
+      }
+      # Make data.frame from rt values like in TIC version
+      plot.2d.df <- as.data.frame(cbind(rt, rt.2d))
+      # Get just the intensity vector for the filtered ions
+      # Join intensity to rts data, filling in rts where there's 0 int
+      plot.2d.df <- plot.2d.df %>%
+        full_join(eic.data, by = 'rt') %>%
+        select(rt, rt.2d, intensity)
+    }
+  #### EIC
 
   # Group 1D retention times based on modulation time
   rt.adj <- NULL
   raster.counter <- 0
   for(i in 1:length(rt)){
+#    if(i == 45){browser()}
+    rt.adj[i] = raster.counter
     if(rt.2d[i] > rt.2d[i + 1] & i != length(rt)){
+#    if(rt.2d[i + 1] < rt.2d[i] & i != length(rt)){
       raster.counter <- raster.counter + mod.time
     }
-    rt.adj[i] = raster.counter
+#    rt.adj[i] = raster.counter
   }
 
   # Group 2D retention times so there aren't any empty spots
-  rt.2d.adj = round(rt.2d)
+  rt.2d.adj = round(rt.2d * 2) / 2
 
   # Use log scale if specified (useful for EICs) and remove NAs
   # Need to use 1 if log scale so -Inf doesn't show up
@@ -509,13 +571,27 @@ setMethod('plot2D', 'MSnExp', function(object,
   # Trim data to xlims since xlims isn't working in ggplot
   plot.2d.df = cbind(plot.2d.df, rt.adj, rt.2d.adj)
   plot.2d.df = plot.2d.df %>%
-    filter(rt >= rt.min & rt <= rt.max)
+    filter(rt >= rt.min & rt <= rt.max) %>%
+  # also do rt2 lims
+    filter(rt.2d.adj >= rt2.min & rt.2d.adj <= rt2.max) %>%
+  # and intensity
+    filter(intensity >= int.min & intensity <= int.max)
+
+  # Turn scale direction into num
+  if(reverse.scale == T){
+    scale.direction = -1
+  }else{
+    scale.direction = 1
+  }
+
+#browser()
 
   # plot function
+  if(plot.type == '2D'){
     plot.2d <- ggplot(plot.2d.df, aes(x = rt.adj, y = rt.2d.adj)) +
       geom_raster(aes(fill = intensity), interpolate = T, na.rm = T) +
 #      scale_x_continuous(NULL, expand = c(0, 0)) +
-      scale_fill_distiller(palette = 'Spectral', direction = -1) +
+      scale_fill_distiller(palette = color.scale, direction = scale.direction) +
       xlab('1D Retention Time (s)') +
       ylab('2D Retention Time (s)') +
 #      xlim(rt.min, rt.max) +
@@ -523,7 +599,7 @@ setMethod('plot2D', 'MSnExp', function(object,
 #      coord_cartesian(xlim = c(rt.min, rt.max)) +
 #      rescale(xlim = c(rt.min, rt.max)) +
       ggtitle(
-        if(missing(ion)){
+        if(is.null(ion)){
           paste0('TIC: File ', file)
         }else{
           paste0('EIC: Ions ', round(mz.range[1], digits = mz.digits), ' - ',
@@ -543,6 +619,12 @@ setMethod('plot2D', 'MSnExp', function(object,
   }
   if(print.output == T){
     print(plot.2d)
+  }
+  }else if(plot.type == '3D'){
+    plot.2d = plot_ly(plot.2d.df) %>%
+      add_surface(x = rt.adj, y = rt.2d.adj, z = intensity)
+  }else{
+    print('Error: Select 2D or 3D for plot.type')
   }
 })
 

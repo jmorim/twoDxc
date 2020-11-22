@@ -1,8 +1,9 @@
 extractIonChromatogram = function(object, file, mz.min, mz.max){
       suppressWarnings(
-        eic.data = as.data.frame(filterMz(filterFile(object, file),
+        eic.data <- as.data.frame(filterMz(filterFile(object, file),
                                           c(mz.min, mz.max)))
       )
+      stopifnot("No ions found in this range"= nrow(eic.data) > 0)
       # need to change column i to 'intensity' to match TIC method
       colnames(eic.data)[4] = 'intensity'
 
@@ -14,50 +15,26 @@ extractIonChromatogram = function(object, file, mz.min, mz.max){
       }
 
       # Make data.frame from rt values
-      eic.df = as.data.frame(cbind(rt, rt.2d))
+#      eic.df = as.data.frame(cbind(rt, rt.2d))
 
       # Get intensity vector for filtered ions an join to rt data, filling in rt
       # where there's 0 int
-      eic.df = eic.df %>%
-        full_join(eic.data, by = 'rt') %>%
-        dplyr::select(rt, rt.2d, intensity)
-      return(eic.df)
+      eic.data = eic.data %>%
+#        full_join(eic.data, by = 'rt') %>%
+#        dplyr::select(rt, rt.2d, intensity)
+        dplyr::select(rt, intensity)
+      return(eic.data)
 }
 
 addScanRate <- function(x){
   stopifnot(inherits(x, 'MSnExp'))
-  rts = rtime(x)
-  nScans = length(rts)
-  x@experimentData@other$scanRate = nScans / (max(rts) - min(rts))
+  rts.by.file = split(rtime(x), fromFile(x))
+  nScans = lapply(rts.by.file, length)
+  x@experimentData@other$scanRate = lapply(seq_along(nScans), function(x){
+    nScans[[x]] / (max(rts.by.file[[x]]) - min(rts.by.file[[x]]))
+  })
   x
 }
-#setGeneric('rasterize', function(object,
-#                                 file = 1,
-#                                 mod.time,
-#                                 delay.time = 0,
-#                                 ion = NULL,
-#                                 mz.tol = c('ppm', 'abs'),
-#                                 ppm.tol = 20,
-#                                 abs.tol = 0.5)
-#                                 # log.scale = F,
-#                                 # rt.min = 0,
-#                                 # rt.max = max(rtime(object)),
-#                                 # rt2.min = 0,
-#                                 # rt2.max = mod.time,
-#                                 # mz.min = object@featureData$lowMZ,
-#                                 # mz.max = object@featureData$highMZ,
-#                                 # int.min = 0,
-#                                 # int.max = max(object@featureData@data$totIonCurrent),
-#                                 # color.scale = 'Spectral',
-#                                 # reverse.scale = T,
-#                                 # save.output = F,
-#                                 # filename = '2dplot',
-#                                 # filetype = '.pdf',
-#                                 # filepath = ='.',
-#                                 # print.output = T,
-#                                 # mz.digits = 4,
-#                                 # plot.type = '2D')
-#           standardGeneric('rasterize'))
 
 rasterize = function(object,
                      file = 1,
@@ -91,7 +68,11 @@ rasterize = function(object,
     # but if mz range specified
     if(mz.min != object@featureData@data$lowMZ ||
        mz.max != object@featureData@data$highMZ){
-      plot.2d.df = extractIonChromatogram(object, file, mz.min, mz.max)
+      eic.data = extractIonChromatogram(object, file, mz.min, mz.max)
+      # Join intensity to rt data
+      plot.2d.df = as.data.frame(cbind(rt, rt.2d))
+      plot.2d.df = plot.2d.df %>%
+        full_join(eic.data, by = 'rt')
     # TIC case
     }else{
       # Get total ion current
@@ -110,7 +91,13 @@ rasterize = function(object,
     }else{
       mz.range = ion + c(-abs.tol, abs.tol)
     }
-    extractIonChromatogram(object, file, mz.range[1], mz.range[2])
+    eic.data = extractIonChromatogram(object,
+                                       file,
+                                       mz.range[1], mz.range[2])
+      # Join intensity to rt data
+    plot.2d.df = as.data.frame(cbind(rt, rt.2d))
+    plot.2d.df = plot.2d.df %>%
+      full_join(eic.data, by = 'rt')
   }
 
   # Group 1D retention times based on mod time
@@ -128,10 +115,17 @@ rasterize = function(object,
 
   # Group 2D retention times so there aren't empty spots
   object = addScanRate(object)
-  scan.rate = object@experimentData@other$scanRate
+  scan.rate = object@experimentData@other$scanRate[[file]]
   # Bin using scan rate
-  rt.2d.adj = round(rt.2d * scan.rate) / scan.rate
-#  og.rt.2d.adj = round(rt.2d * 2) / 2
+  # Need to test other scan rates to see if this holds
+  rt.2d.adj = round(rt.2d * round(scan.rate)) / round(scan.rate)
+#  rt.2d.adj = round(rt.2d * 26.5) / 26.5
+#  data.points = length(rt)
+#  scans.per.mod = ceiling(data.points / (max(rt) / mod.time))
+#  rt.2d.adj = seq(1 / scan.rate, mod.time, length.out = scans.per.mod)
+#  remainder = data.points - (length(unique(rt.adj)) * length(rt.2d.adj))
+#
+#  browser()
 
   # Add intensity, replace NAs with 0
   plot.2d.df$intensity[is.na(plot.2d.df$intensity)] = 0
@@ -185,6 +179,8 @@ rasterize = function(object,
 #' @param plot.type Choose from 2D ggplot, interactive 2D plotly plot ('2Di'),
 #'          or an interactive 3D plotly plot ('3D'). Default is 2D
 #' @return A 2-dimensional plot
+#' @importFrom reshape2 dcast
+#' @import plotly
 #' @export
 setGeneric('plot2D', function(object,
                               file = 1,
@@ -196,15 +192,13 @@ setGeneric('plot2D', function(object,
                               abs.tol = 0.5,
                               log.scale = F,
                               rt.min = 0,
-                              rt.max = max(
-                                object@featureData@data$retentionTime),
+                              rt.max = max(rtime(object)),
                               rt2.min = 0,
                               rt2.max = mod.time,
-                              mz.min = object@featureData$lowMZ,
-                              mz.max = object@featureData$highMZ,
+                              mz.min = min(object@featureData$lowMZ),
+                              mz.max = max(object@featureData$highMZ),
                               int.min = 0,
-                              int.max = max(
-                                object@featureData@data$totIonCurrent),
+                              int.max = max(tic(object), na.rm = T)+1,
                               color.scale = 'Spectral',
                               reverse.scale = T,
                               save.output = F,
@@ -226,15 +220,13 @@ setMethod('plot2D', 'MSnExp', function(object,
                                        abs.tol = 0.5,
                                        log.scale = F,
                                        rt.min = 0,
-                                       rt.max = max(
-                                         object@featureData@data$retentionTime),
+                                       rt.max = max(rtime(object)),
                                        rt2.min = 0,
                                        rt2.max = mod.time,
-                                       mz.min = object@featureData$lowMZ,
-                                       mz.max = object@featureData$highMZ,
+                                       mz.min = min(object@featureData$lowMZ),
+                                       mz.max = max(object@featureData$highMZ),
                                        int.min = 0,
-                                       int.max = max(
-                                         object@featureData@data$totIonCurrent),
+                                       int.max = max(tic(object), na.rm = T)+1,
                                        color.scale = 'Spectral',
                                        reverse.scale = T,
                                        save.output = F,
@@ -280,15 +272,14 @@ setMethod('plot2D', 'MSnExp', function(object,
   # Check desired return format. If wide, needs to be formatted so that
   # columns represent rt1, rows represent rt2, and values represent intensity
   # Useful for plotly plots
-  if(plot.type== '2Di' || plot.type== '3D'){
-    plot.data = dcast(plot.data[,3:5],
+  if(plot.type == '2Di' || plot.type == '3D'){
+    plot.data = reshape2::dcast(plot.data[,3:5],
                        rt.2d.adj ~ rt.adj,
                        value.var = 'intensity',
                        fun.aggregate = mean)
     rownames(plot.data) = plot.data$rt.2d.adj
     plot.data = plot.data[, -1]
   }
-
   # Turn scale direction into number, T == 1, F == 0
   scale.direction = 1 - (2 * reverse.scale)
 
@@ -303,16 +294,20 @@ setMethod('plot2D', 'MSnExp', function(object,
         if(is.null(ion)){
           paste0('TIC: File ', file)
         }else{
-          paste0('EIC: Ions ', round(mz.range[1], digits = mz.digits), ' -- ',
-                 round(mz.range[2], digits = mz.digits), ', File: ', file)
+          paste0('EIC: Ions ', round(mz.min, digits = mz.digits), ' -- ',
+                 round(mz.max, digits = mz.digits), ', File: ', file)
         }) +
       theme_classic()
   }else if(plot.type== '2Di'){
     plot.2d = plot_ly(z = as.matrix(plot.data),
                       type = 'heatmap',
+                      colors = color.scale,
+                      reversescale = reverse.scale,
                       zsmooth = 'best')
   }else{
-    plot.2d = plot_ly(z = ~as.matrix(plot.data)) %>%
+    plot.2d = plot_ly(z = ~as.matrix(plot.data),
+                      colors = color.scale,
+                      reversescale = reverse.scale) %>%
       add_surface()
   }
   plot.2d

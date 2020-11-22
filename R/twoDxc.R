@@ -355,9 +355,34 @@ matchPsgs <- function(pseudospec, all.pspecs, ppm.tol, rt.tol, rt2.tol,
   return(condensed.psg)
 }
 
+# Subtract ion function
+#' Subtract ion
+#'
+#' This function subtracts an ion from the MSnbase object by removing its
+#' intensity from the TIC.
+#'
+#' @param object An xsAnnotate object returned by CAMERA that needs 2D peak
+#'          grouping
+#' @param ion The ion to subtract
+#' @param tol The tolerance window for the ion in ppm
+#'
+#' @return An xsAnnotate2D object with the ion intensity subtracted
+#' @export
+subtractIon = function(object, ion, tol){
+  mz.range = calc.mz.Window(ion, tol)
+  eic.df = extractIonChromatogram(object, file = 1, mz.range[1], mz.range[2])
+  #  object.tic =
+  tic.data = data.frame(rt = rtime(object), intensity = tic(object))
+  subtracted.data = tic.data %>%
+    full_join(eic.df, by = 'rt', suffix = c('.tic', '.eic')) %>%
+    mutate(intensity = intensity.tic - intensity.eic) %>%
+    pull(intensity)
+  object@featureData@data$totIonCurrent = as.numeric(subtracted.data)
+  return(object)
+}
+
 # Function to get intensities from pseudospectrum
 # Need to modify to take intensities from single sample datasets
-#' @export
 getInt <- function(x){
   if("npeaks" %in% colnames(x) | "npeaks" %in% names(x)){
     int.mat <- as.data.frame(x) %>%
@@ -381,7 +406,6 @@ getMode <- function(x){
 }
 
 # Get quantitative (main) ion by intensity
-#' @export
 getQuantIon <- function(x){
   if(nrow(x) == 1){
     return(x[, 'mz'])
@@ -391,7 +415,6 @@ getQuantIon <- function(x){
   return(q.ion)
 }
 
-#' @export
 # Function to calculate mz range given mz and ppm tolerance
 # Returns range in a list
 calc.mz.Window <- function(mz, ppm){
@@ -400,7 +423,6 @@ calc.mz.Window <- function(mz, ppm){
   return(c(lower.mz, upper.mz))
 }
 
-#' @export
 # Function to calculate 2D RT from the 1D RT
 convert.2drt <- function(rt, mod.time, delay.time = 0) {
   rt.adj <- rt - delay.time

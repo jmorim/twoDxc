@@ -20,7 +20,9 @@ Depends:
     CAMERA
 Imports:
     dplyr,
-    ggplot2
+    ggplot2,
+    plotly,
+    reshape2
 Suggests:
     future.apply,
     knitr,

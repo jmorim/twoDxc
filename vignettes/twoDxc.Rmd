@@ -207,7 +207,7 @@ Visualizing 2D chromatography data is easier as a heatmap plot, in which
 the x-axis shows 1D RT, the y-axis shows 2D RT, and the z-axis (color) shows ion
 intensity.
 ```{r TIC_plot}
-plot2D(tea.data, file = 1, 60, 30)
+tea.2d = plot2D(tea.data, file = 1, 60, 25)
 ```
 Because the total ion chromatogram (TIC) is a combination of intensities of all
 ion channels, this information underrepresents the chemical diversity in this
@@ -227,5 +227,44 @@ eics.2d <- lapply(data.mz.range, function(x){
          mz.tol = 'abs', save.output = F)
 })
 ```
+
+GCxGC example
+```{r gc}
+gc.file = system.file('tea_data', 'GCxGC_ex.mzML', package = 'twoDxc')
+gc.data = readMSData(gc.file, mode = 'onDisk')
+gc.plot = plot2D(gc.data, mod.time = 4.00, plot.type = '2D')
+gc.plot
+```
+```{r subtraction}
+
+plot2D(tea.data, file = 1, mod.time = 60, delay.time = 25, ion = 195.0882,
+       plot.type = '3D')
+test.subtract = subtractIon(tea.data, solvent.ions, 25)
+
+test.subtract.x = tea.data
+test.subtract.x = apply(solvent.ions, function(x){
+  subtractIon(test.subtract.x, x, 25)
+})
+
+
+test.subtract.1 = subtractIon(tea.data, solvent.ions[2], 25)
+test.subtract.2 = subtractIon(test.subtract.1, solvent.ions[1], 25)
+plot2D(test.subtract.2, mod.time = 60, delay.time = 25, plot.type = '2D')
+
+solvent.ions = c(158.9614, 172.9769, 922.0098, 190.1622, 141.9588, 126.9716, 182.9849, 222.9593)
+
+test.subtract.x = tea.data
+for(ion in solvent.ions){
+  test.subtract.x = subtractIon(test.subtract.x, ion, 25)
+}
+
+#plot2D(tea.data, mod.time = 60, delay.time = 25, plot.type = '2D')
+plot2D(test.subtract.x, mod.time = 60, delay.time = 25, plot.type = '2D')
+```
+```{r}
+plot2D(tea.data, mod.time = 60, delay.time = 25, plot.type = '2D',
+       rt.max = 62 * 60)
+```
+
 
 # References

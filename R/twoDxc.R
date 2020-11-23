@@ -415,8 +415,13 @@ getQuantIon <- function(x){
   return(q.ion)
 }
 
-# Function to calculate mz range given mz and ppm tolerance
-# Returns range in a list
+# calc.mz.Window function
+#' Function to calculate m/z window given an ion and ppm tolerance
+#' @param mz m/z
+#' @param ppm ppm tolerance for the m/z window
+#'
+#' @return A vector of length 2 with min m/z and max m/z
+#' @export
 calc.mz.Window <- function(mz, ppm){
   lower.mz <- mz - (mz * ppm / 10^6)
   upper.mz <- mz + (mz * ppm / 10^6)

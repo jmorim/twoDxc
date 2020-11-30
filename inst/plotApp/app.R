@@ -4,6 +4,8 @@ library(MSnbase)
 library(twoDxc)
 library(dplyr)
 library(ggplot2)
+library(shinycssloaders)
+library(RColorBrewer)
 
 ##################
 # Inputs and outputs
@@ -32,7 +34,7 @@ ui <- fluidPage(
         title = "File",
         # file
         fileInput(
-          inputId = "data.files",
+          inputId = "filename",
           label = "Data file(s)",
           multiple = T,
           accept = ".mzml"
@@ -56,7 +58,8 @@ ui <- fluidPage(
         selectInput(
           inputId = "dimensions",
           label = "Plot dimensions",
-          choices = c("2D", "2Di", "3D")
+#          choices = c("2D", "2Di", "3D")
+          choices = c("2Di", "3D")
         ),
         # rt1 range
         sliderInput(
@@ -140,8 +143,9 @@ ui <- fluidPage(
   mainPanel(
     tableOutput(outputId = "mz.window"),
     # plot
-    plotOutput(outputId = "plot"),
+    plotlyOutput(outputId = "plot") %>% withSpinner(color = '#0dc5c1'),
 #    plotlyOutput(outputId = 'plotly_plot'),
+    plotOutput(outputId = 'xcms_plot') %>% withSpinner(color = '#0dc5c1'),
     width = 9
   )
 )
@@ -164,18 +168,27 @@ server <- function(input, output, session) {
 
   #  output$range.controls
   # change from observe to reactive?
+
+  ms.data = reactive({
+    req(input$filename)
+
+    readMSData(input$filename$datapath, mode= 'onDisk')
+  })
+
   observe({
-    if (!is.null(input$data.files)) {
-      ms.data <- readMSData(input$data.files$datapath, mode = "onDisk")
-    } else {
-      ms.data <- readMSData(system.file(
-        "tea_data", "prime.mzML",
-        package = "twoDxc"
-      ), mode = "onDisk")
-    }
+    req(input$filename)
+#    if (!is.null(input$data.files)) {
+#      ms.data <- readMSData(input$data.files$datapath, mode = "onDisk")
+#    } else {
+#      ms.data <- readMSData(system.file(
+#        "tea_data", "prime.mzML",
+#        package = "twoDxc"
+#      ), mode = "onDisk")
+#    }
     # update controls based on data file
     # rt1
-    rt.max <- round(max(ms.data@featureData@data$retentionTime) / 60, 3) + 0.001
+#    rt.max <- round(max(ms.data()@featureData@data$retentionTime) / 60, 3) + 0.001
+    rt.max <- round(max(rtime(ms.data())) / 60, 3) + 0.001
     updateSliderInput(session, "rt1.range",
       value = c(0, rt.max),
       min = 0, max = rt.max
@@ -187,14 +200,14 @@ server <- function(input, output, session) {
       min = 0, max = rt2.max
     )
     # mz
-    mz.min <- floor(min(ms.data@featureData@data$lowMZ))
-    mz.max <- ceiling(max(ms.data@featureData@data$highMZ))
+    mz.min <- floor(min(ms.data()@featureData@data$lowMZ))
+    mz.max <- ceiling(max(ms.data()@featureData@data$highMZ))
     updateSliderInput(session, "mz.range",
       value = c(mz.min, mz.max),
       min = mz.min, max = mz.max
     )
     # intensity
-    int.max <- max(ms.data@featureData@data$totIonCurrent) + 1
+    int.max <- max(ms.data()@featureData@data$totIonCurrent) + 1
     updateSliderInput(session, "int.range",
       value = c(0, int.max),
       min = 0, max = int.max
@@ -202,8 +215,10 @@ server <- function(input, output, session) {
   })
 
   plot.params <- eventReactive(input$update, {
-    if (!is.null(input$data.files)) {
-      ms.data <- readMSData(input$data.files$datapath, mode = "onDisk")
+#    if (!is.null(input$data.files)) {
+#      ms.data <- readMSData(input$data.files$datapath, mode = "onDisk")
+
+      req(input$filename)
       if (input$eic == T) {
         plot.eic.ion <- input$eic.ion
       } else {
@@ -211,7 +226,7 @@ server <- function(input, output, session) {
       }
       #    }
       list(
-        object = ms.data,
+        object = ms.data(),
         file = 1,
         mod.time = input$mod.time,
         delay.time = input$delay.time,
@@ -229,46 +244,74 @@ server <- function(input, output, session) {
         int.max = input$int.range[2],
         plot.type = input$dimensions
       )
-    }
+#    }
   })
 
-  output$plot <- renderPlot({
-    if (!is.null(input$data.files) && input$update > 0) {
-      if (input$dimensions == "2D") {
-        do.call(plot2D, plot.params())
-      } else {
-        do.call(plot2D, plot.params())
+# 2D/3D plotly output ----------------------------------------------------------
+
+  output$plot <- renderPlotly({
+    req(input$filename, input$update, nrow(input$filename) == 1)
+    do.call(plot2D, plot.params())
+  })
+
+# xcms plot output -------------------------------------------------------------
+  output$xcms_plot = renderPlot({
+    req(input$filename)
+
+    input$update
+
+    n.files = nrow(input$filename)
+
+    mz.range = isolate({
+      if(input$eic == T && !is.null(input$eic.ion)){
+        calc.mz.Window(input$eic.ion, input$mz.tol)
+      }else{
+        input$mz.range
       }
-    }
+    })
 
-#    output$plotly_plot = renderPlotly({
-#      if (!is.null(input$data.files) && input$update > 0) {
-#        if (input$dimensions == "3D" || input$dimensions == "2Di"){
-#          do.call(plot2D, plot.params())
-#        }else{
-#          do.call(plot2D, plot.params())
-#        }
-#      }
-    }
+#    if(input$eic == T){
+#      mz.range = isolate(calc.mz.Window(input$eic.ion, input$mz.tol))
+#    }else{
+#        mz.range = isolate(input$mz.range)
+#    }
+
+    chrom = suppressMessages(
+      chromatogram(
+      object = ms.data(),
+      rt = isolate(input$rt1.range * 60),
+      mz = mz.range,
+      aggregationFun = 'sum'
+      )
     )
+#####
+#    chromatogram(
+#      object,
+#      rt,
+#      mz,
+#      aggregationFun = "sum",
+#      missing = NA_real_,
+#      msLevel = 1L,
+#      BPPARAM = bpparam(),
+#      adjustedRtime = hasAdjustedRtime(object),
+#      filled = FALSE,
+#      include = c("apex_within", "any", "none")
+#    )
+#####
+    plot.colors = brewer.pal(n.files, input$color)
 
-    #    plot2D(plot.params())
-    #    if(!is.null(input$data.files)){
-    #      ms.data = readMSData(input$data.files$datapath, mode = 'onDisk')
-    #      if(input$eic == T){
-    #        plot.eic.ion = input$eic.ion
-    #      }else{
-    #        plot.eic.ion = NULL
-    #      }
-    #      plot2D(ms.data, file = 1, input$mod.time, input$delay.time,
-    #             ion = plot.eic.ion, ppm.tol = input$mz.tol,
-    #             color.scale = input$color, reverse.scale = input$color.reverse,
-    #             rt.min = input$rt1.range[1] * 60, rt.max = input$rt1.range[2] * 60,
-    #             mz.min = isolate({input$mz.range[1]}),
-    #             mz.max = isolate({input$mz.range[2]}))
-    #    }
-    #
-    #    plot2D()
+    plot(
+      chrom,
+      col = paste0(plot.colors))
+
+#    legend(x = 1, y = 95,
+#           legend = input$filename[, 1],
+#           col = brewer.pal(n.files, input$color))
+    legend('top', legend = basename(input$filename[, 1]),
+           col = plot.colors, pch = 15)
+  })
+
+# m/z window table output ------------------------------------------------------
 
   output$mz.window <- renderTable(
     {
@@ -288,10 +331,24 @@ server <- function(input, output, session) {
   )
 }
 
-# calc.mz.Window <- function(mz, ppm){
-#  lower.mz <- mz - (mz * ppm / 10^6)
-#  upper.mz <- mz + (mz * ppm / 10^6)
-#  return(c(lower.mz, upper.mz))
-# }
+#old junk that used to be in plot output
+######
+#    if (!is.null(input$data.files) && input$update > 0) {
+#      if (input$dimensions == "2D") {
+#        do.call(plot2D, plot.params())
+#      } else {
+#        do.call(plot2D, plot.params())
+#      }
+#    }
+#
+#    output$plotly_plot = renderPlotly({
+#      if (!is.null(input$data.files) && input$update > 0) {
+#        if (input$dimensions == "3D" || input$dimensions == "2Di"){
+#          do.call(plot2D, plot.params())
+#        }else{
+#          do.call(plot2D, plot.params())
+#        }
+#      }
+
 
 shinyApp(ui = ui, server = server)

@@ -24,10 +24,6 @@ library(ggplot2)
 #
 ##################
 
-# use sidebarLayout(
-#   sidebarPanel(),
-#   mainPanel()
-# )
 ui <- fluidPage(
   sidebarPanel(
     tabsetPanel(
@@ -60,7 +56,7 @@ ui <- fluidPage(
         selectInput(
           inputId = "dimensions",
           label = "Plot dimensions",
-          choices = c("2D", "3D")
+          choices = c("2D", "2Di", "3D")
         ),
         # rt1 range
         sliderInput(
@@ -145,92 +141,15 @@ ui <- fluidPage(
     tableOutput(outputId = "mz.window"),
     # plot
     plotOutput(outputId = "plot"),
+#    plotlyOutput(outputId = 'plotly_plot'),
     width = 9
   )
 )
 
-#####
-# fluidRow(
-#    column(3,
-#      # *Input() functions,
-#      # file
-#      fileInput(inputId = 'data.files',
-#                label = 'Data file(s)',
-#                multiple = T,
-#                accept = '.mzml'),
-#      # mod time
-#      numericInput(inputId = 'mod.time',
-#                   label = 'Modulation time (s)',
-#                   value = 60),
-#      # delay time
-#      numericInput(inputId = 'delay.time',
-#                   label = 'Delay time (s)',
-#                   value = 30),
-#      # 2d or 3d
-#      selectInput(inputId = '2d.3d',
-#                  label = 'Plot dimensions',
-#                  choices = c('2D', '3D')),
-#      # rt1 range
-#      sliderInput(inputId = 'rt1.range',
-#                  label = '1D RT range (min)',
-#                  value = c(0, 60),
-#                  min = 0, max = 72),
-#      # rt2 range
-#      sliderInput(inputId = 'rt2.range',
-#                  label = '2D RT range (s)',
-#                  value = c(0, 60),
-#                  min = 0, max = 60),
-#      # m/z range, isolate
-#      sliderInput(inputId = 'mz.range',
-#                  label = 'mz range',
-#                  value = c(100, 1700),
-#                  min = 50, max = 1700),
-#      # eic ion and tolerance
-#      checkboxInput(inputId = 'eic',
-#                    label = 'EIC'),
-#      numericInput(inputId = 'eic.ion',
-#                   label = 'EIC ion',
-#                   step = 0.0001,
-#                   value = NULL),
-#      numericInput(inputId = 'mz.tol',
-#                   label = 'm/z tolerance (ppm)',
-#                   value = 25),
-#
-#      # int range
-#      sliderInput(inputId = 'int.range',
-#                  label = 'intensity range',
-#                  value = c(0, 10^9),
-#                  min = 0, max = 10^9),
-#
-#      # color scale
-#      selectInput(inputId = 'color',
-#                  label = 'Color scale',
-#                  choices = rownames(RColorBrewer::brewer.pal.info),
-#                  selected = 'Spectral'),
-#      # reverse scale
-#      checkboxInput(inputId = 'color.reverse',
-#                    label = 'Reverse scale',
-#                    value = T),
-#      # For updating
-#      actionButton(inputId = 'update',
-#                   label = 'Update'),
-#           ),
-#####
-#    column(9,
-#      # *Output() functions,
-#      # mz window
-#      tableOutput(outputId = 'mz.window'),
-#
-#      # plot
-#      plotOutput(outputId = 'plot')
-#    )
-#  ),
-#
-# )
-#####
 
 server <- function(input, output, session) {
-  options(shiny.maxRequestSize = 1024^3)
+  options(shiny.maxRequestSize = 1024^3,
+          shiny.reactlog = T)
   #  ms.data = readMSData(input$data.files, mode = 'onDisk')
 
   # update slider values based on input file
@@ -321,6 +240,18 @@ server <- function(input, output, session) {
         do.call(plot2D, plot.params())
       }
     }
+
+#    output$plotly_plot = renderPlotly({
+#      if (!is.null(input$data.files) && input$update > 0) {
+#        if (input$dimensions == "3D" || input$dimensions == "2Di"){
+#          do.call(plot2D, plot.params())
+#        }else{
+#          do.call(plot2D, plot.params())
+#        }
+#      }
+    }
+    )
+
     #    plot2D(plot.params())
     #    if(!is.null(input$data.files)){
     #      ms.data = readMSData(input$data.files$datapath, mode = 'onDisk')
@@ -338,7 +269,7 @@ server <- function(input, output, session) {
     #    }
     #
     #    plot2D()
-  })
+
   output$mz.window <- renderTable(
     {
       if (!is.null(input$eic.ion)) {

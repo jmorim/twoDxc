@@ -208,6 +208,7 @@ the x-axis shows 1D RT, the y-axis shows 2D RT, and the z-axis (color) shows ion
 intensity.
 ```{r TIC_plot}
 tea.2d = plot2D(tea.data, file = 1, 60, 25)
+tea.2d
 ```
 Because the total ion chromatogram (TIC) is a combination of intensities of all
 ion channels, this information underrepresents the chemical diversity in this

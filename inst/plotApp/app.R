@@ -39,6 +39,12 @@ ui <- fluidPage(
           multiple = T,
           accept = ".mzml"
         ),
+        # select files
+        checkboxGroupInput(
+          inputId = 'file.select',
+          label = 'Select files to plot',
+          choices = NULL
+        ),
         # mod time
         numericInput(
           inputId = "mod.time",
@@ -53,12 +59,12 @@ ui <- fluidPage(
         )
       ),
       tabPanel(
-        title = "Plot",
+        title = "Plot Params",
         # 2d or 3d
         selectInput(
           inputId = "dimensions",
           label = "Plot dimensions",
-#          choices = c("2D", "2Di", "3D")
+          #          choices = c("2D", "2Di", "3D")
           choices = c("2Di", "3D")
         ),
         # rt1 range
@@ -141,11 +147,20 @@ ui <- fluidPage(
     width = 3
   ),
   mainPanel(
+    tags$head(tags$style(".shiny-plot-output{height:80vh !important;}")),
     tableOutput(outputId = "mz.window"),
     # plot
-    plotlyOutput(outputId = "plot") %>% withSpinner(color = '#0dc5c1'),
-#    plotlyOutput(outputId = 'plotly_plot'),
-    plotOutput(outputId = 'xcms_plot') %>% withSpinner(color = '#0dc5c1'),
+    tabsetPanel(
+      tabPanel(
+        title = "2D plot",
+        plotlyOutput(outputId = "plot") %>% withSpinner(color = "#0dc5c1")
+      ),
+      tabPanel(
+        title = "xcms plot",
+        #    plotlyOutput(outputId = 'plotly_plot'),
+        plotOutput(outputId = "xcms_plot") %>% withSpinner(color = "#0dc5c1"),
+      )
+    ),
     width = 9
   )
 )
@@ -154,20 +169,6 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   options(shiny.maxRequestSize = 1024^3,
           shiny.reactlog = T)
-  #  ms.data = readMSData(input$data.files, mode = 'onDisk')
-
-  # update slider values based on input file
-  #  output$int.range.control = renderUI({
-  #    if(!is.null(input$data.files)){
-  #      ms.data = readMSData(input$data.files$datapath, mode = 'onDisk')
-  #      max.int = max(ms.data@featureData@data$totIonCurrent)
-  #    sliderInput(inputId = 'int.range', label = 'Intensity range',
-  #                min = 0, max = max.int, value = c(0, max.int))
-  #    }
-  #  })
-
-  #  output$range.controls
-  # change from observe to reactive?
 
   ms.data = reactive({
     req(input$filename)
@@ -175,19 +176,19 @@ server <- function(input, output, session) {
     readMSData(input$filename$datapath, mode= 'onDisk')
   })
 
+  # update inputs based on files selected
   observe({
     req(input$filename)
-#    if (!is.null(input$data.files)) {
-#      ms.data <- readMSData(input$data.files$datapath, mode = "onDisk")
-#    } else {
-#      ms.data <- readMSData(system.file(
-#        "tea_data", "prime.mzML",
-#        package = "twoDxc"
-#      ), mode = "onDisk")
-#    }
-    # update controls based on data file
-    # rt1
-#    rt.max <- round(max(ms.data()@featureData@data$retentionTime) / 60, 3) + 0.001
+
+    # update file select
+    updateCheckboxGroupInput(
+      session,
+      inputId = 'file.select',
+      choiceNames = input$filename[, 1],
+      choiceValues = input$filename$datapath,
+      selected = input$filename$datapath
+    )
+
     rt.max <- round(max(rtime(ms.data())) / 60, 3) + 0.001
     updateSliderInput(session, "rt1.range",
       value = c(0, rt.max),
@@ -214,6 +215,11 @@ server <- function(input, output, session) {
     )
   })
 
+  file.indices = reactive(
+    which(input$filename[, 4] %in% input$file.select)
+  )
+
+  # change to reactive
   plot.params <- eventReactive(input$update, {
 #    if (!is.null(input$data.files)) {
 #      ms.data <- readMSData(input$data.files$datapath, mode = "onDisk")
@@ -256,7 +262,7 @@ server <- function(input, output, session) {
 
 # xcms plot output -------------------------------------------------------------
   output$xcms_plot = renderPlot({
-    req(input$filename)
+    req(input$filename, input$file.select)
 
     input$update
 
@@ -270,15 +276,11 @@ server <- function(input, output, session) {
       }
     })
 
-#    if(input$eic == T){
-#      mz.range = isolate(calc.mz.Window(input$eic.ion, input$mz.tol))
-#    }else{
-#        mz.range = isolate(input$mz.range)
-#    }
-
     chrom = suppressMessages(
       chromatogram(
-      object = ms.data(),
+      object = filterFile(
+        ms.data(), file = file.indices()
+        ),
       rt = isolate(input$rt1.range * 60),
       mz = mz.range,
       aggregationFun = 'sum'

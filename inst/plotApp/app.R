@@ -5,6 +5,7 @@ library(twoDxc)
 library(dplyr)
 library(ggplot2)
 library(shinycssloaders)
+library(shinythemes)
 library(RColorBrewer)
 
 ##################
@@ -27,6 +28,7 @@ library(RColorBrewer)
 ##################
 
 ui <- fluidPage(
+  theme = shinytheme('darkly'),
   sidebarPanel(
     tabsetPanel(
       # *Input() functions,
@@ -136,7 +138,8 @@ ui <- fluidPage(
           inputId = "color.reverse",
           label = "Reverse scale",
           value = T
-        )
+        ),
+        uiOutput('plot.params.rui')
       )
     ),
     # For updating
@@ -177,6 +180,17 @@ server <- function(input, output, session) {
   })
 
   # update inputs based on files selected
+  output$plot.params.rui = renderUI({
+    req(ms.data())
+    rt.max = round(max(rtime(ms.data())) / 60, 3) + 0.001
+    sliderInput(
+          inputId = "rt1.range.rui",
+          label = "1D RT range (min)",
+          value = c(0, rt.max),
+          min = 0, max = rt.max,
+          round = -1
+    )
+  })
   observe({
     req(input$filename)
 
@@ -215,8 +229,12 @@ server <- function(input, output, session) {
     )
   })
 
+  file.data = reactive(
+    input$filename
+  )
+
   file.indices = reactive(
-    which(input$filename[, 4] %in% input$file.select)
+    which(file.data()[, 4] %in% input$file.select)
   )
 
   # change to reactive
@@ -266,7 +284,8 @@ server <- function(input, output, session) {
 
     input$update
 
-    n.files = nrow(input$filename)
+#    n.files = nrow(input$filename)
+    n.files = length(file.indices())
 
     mz.range = isolate({
       if(input$eic == T && !is.null(input$eic.ion)){
@@ -286,30 +305,18 @@ server <- function(input, output, session) {
       aggregationFun = 'sum'
       )
     )
-#####
-#    chromatogram(
-#      object,
-#      rt,
-#      mz,
-#      aggregationFun = "sum",
-#      missing = NA_real_,
-#      msLevel = 1L,
-#      BPPARAM = bpparam(),
-#      adjustedRtime = hasAdjustedRtime(object),
-#      filled = FALSE,
-#      include = c("apex_within", "any", "none")
-#    )
-#####
+
     plot.colors = brewer.pal(n.files, input$color)
+    names(plot.colors) = file.data()[file.indices(), 1]
 
     plot(
       chrom,
-      col = paste0(plot.colors))
+      col = plot.colors)
 
 #    legend(x = 1, y = 95,
 #           legend = input$filename[, 1],
 #           col = brewer.pal(n.files, input$color))
-    legend('top', legend = basename(input$filename[, 1]),
+    legend('top', legend = file.data()[file.indices(), 1],
            col = plot.colors, pch = 15)
   })
 

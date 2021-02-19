@@ -207,7 +207,10 @@ Visualizing 2D chromatography data is easier as a heatmap plot, in which
 the x-axis shows 1D RT, the y-axis shows 2D RT, and the z-axis (color) shows ion
 intensity.
 ```{r TIC_plot}
-tea.2d = plot2D(tea.data, file = 1, 60, 25)
+tea.2d = plot2D(tea.data, file = 1, 60, 25, plot.type = '2D',
+                rt.max = 62*60)
+tea.2d
+tea.2d = plot2D(tea.data, file = 1, 60, 25, plot.type = '2Di')
 tea.2d
 ```
 Because the total ion chromatogram (TIC) is a combination of intensities of all
@@ -219,7 +222,8 @@ plot2D(tea.data, file = 1, mod.time = 60, delay.time = 30, ion = 195.0882)
 ```
 
 It may be useful to iterate through the m/z acquisition range and generate
-EICs for each ion. The example code below would do so for m/z range 100 to 108. The upper range for the loop can be adjusted to the max *m/z* recorded.
+EICs for each ion. The example code below would do so for m/z range 100 to 108. 
+The upper range for the loop can be adjusted to the max *m/z* recorded.
 
 ```{r eic_loop}
 data.mz.range <- c(round(min(tea.data@featureData@data$lowMZ)):108)

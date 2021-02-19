@@ -220,13 +220,20 @@ setMethod('plot2D', 'MSnExp', function(object,
                                        abs.tol = 0.5,
                                        log.scale = F,
                                        rt.min = 0,
-                                       rt.max = max(rtime(object)),
+                                       rt.max = max(rtime(object)) + delay.time,
                                        rt2.min = 0,
                                        rt2.max = mod.time,
                                        mz.min = min(object@featureData$lowMZ),
                                        mz.max = max(object@featureData$highMZ),
                                        int.min = 0,
-                                       int.max = max(tic(object), na.rm = T)+1,
+                                       int.max = ceiling(
+                                         max(
+                                           filterFile(
+                                             object, file = file
+                                           )@featureData@data$totIonCurrent
+                                           )
+                                         )+ 1,
+#                                           tic(object), na.rm = T)) + 1,
                                        color.scale = 'Spectral',
                                        reverse.scale = T,
                                        save.output = F,
@@ -239,6 +246,12 @@ setMethod('plot2D', 'MSnExp', function(object,
 
   mz.tol = mz.tol[1]
   plot.type = plot.type[1]
+
+  if(!is.null(ion)){
+    mz.range = calc.mz.Window(ion, ppm.tol)
+    mz.min = mz.range[1]
+    mz.max = mz.range[2]
+  }
 
   plot.data = rasterize(
     object,
@@ -298,12 +311,22 @@ setMethod('plot2D', 'MSnExp', function(object,
                  round(mz.max, digits = mz.digits), ', File: ', file)
         }) +
       theme_classic()
+    if(save.output == T){
+      if(is.null(ion) & filename == '2dplot'){
+        ggsave(paste0(filename, filetype), plot = plot.2d, path = filepath)
+      }else{
+        filename = paste0(filename, '_file_', file, '_', ion, filetype)
+        ggsave(paste0(filename), plot = plot.2d, path = filepath)
+      }
+    }
   }else if(plot.type== '2Di'){
     plot.2d = plot_ly(z = as.matrix(plot.data),
                       type = 'heatmap',
                       colors = color.scale,
                       reversescale = reverse.scale,
-                      zsmooth = 'best')
+                      zsmooth = 'best') %>%
+      layout(xaxis = list(title = '1D Retention Time (min)'),
+             yaxis = list(title = '2D Retention Time (s)'))
   }else{
     plot.2d = plot_ly(z = ~as.matrix(plot.data),
                       colors = color.scale,

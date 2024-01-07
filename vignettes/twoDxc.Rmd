@@ -50,7 +50,7 @@ library(dplyr)
 library(future.apply)
 library(ggplot2)
 
-tea.file <- system.file('tea_data', 'tea_pool_1.mzML', package = 'twoDxc')
+tea.file <- system.file('extdata', 'tea_pool_1.mzML', package = 'twoDxc')
 
 tea.data <- readMSData(tea.file, mode = 'onDisk')
 ```
@@ -106,7 +106,9 @@ tea.xsa <- xsAnnotate(as(tea.peaks, 'xcmsSet'))
 # Group by fwhm
 tea.xsaF <- groupFWHM(tea.xsa, perfwhm = 0.6)
 # Label isotopes
-tea.xsaI <- findIsotopes(tea.xsaF, mzabs = 0.01)
+## subscript out of bounds error
+## see https://github.com/sneumann/CAMERA/issues/27
+#tea.xsaI <- findIsotopes(tea.xsaF, mzabs = 0.01)
 # Group by correlation
 tea.xsaC <- groupCorr(tea.xsaF)
 # Find adducts
@@ -114,6 +116,12 @@ tea.xsaFA <- findAdducts(tea.xsaC, polarity = 'positive',
                          ppm = 25, intval = 'into')
 # Plot example spectrum
 plotPsSpectrum(tea.xsaFA, pspec = c(1:4), maxlabel = 5)
+plotSpectrum = function(object, pspec, value='into', maxlabel=0, title=NULL, mzrange=numeric(), sleep=0, cexMulti=1){
+  peakmat = CAMERA:::getPeaks(object@xcmsSet, index=object@sample);
+  maxo = peakmat[,value]
+  return (peakmat, maxo)
+}
+plotSpectrum(tea.xsaFA, pspec = c(1:4), maxlabel=5)
 ```
 Three of the first four pspectra are 60 seconds apart from each other and
 exhibit similar spectra. 
@@ -148,8 +156,9 @@ the tea extraction.
 
 ## XCMS parts.
 ```{r multiple_xcms}
-teas.files <- dir(system.file('tea_data', package = 'twoDxc'),
-                 full.names = T)[1:3]
+#teas.files <- dir(system.file('extdata', package = 'twoDxc'),
+#                 full.names = T)[1:3]
+teas.files <- dir(system.file('extdata', package='twoDxc'), full.names=T)[5:7]
 teas.group.info <- data.frame(sample_name = sub(basename(teas.files),
                                                 pattern = '.mzML',
                                                 replacement = '',
@@ -194,7 +203,8 @@ proc.time() - timer
 should demonstrate an improvement in processing time when data are grouped in
 parallel.
 ```{r parallel_processing, cache = TRUE}
-plan(multiprocess)
+#plan(multiprocess)
+plan(multisession)
 timer <- proc.time()
 xsa2D.multi.p <- group2D(xsaFA.multi, 60, 30, parallelized = T)
 proc.time() - timer
@@ -208,7 +218,7 @@ the x-axis shows 1D RT, the y-axis shows 2D RT, and the z-axis (color) shows ion
 intensity.
 ```{r TIC_plot}
 tea.2d = plot2D(tea.data, file = 1, 60, 25, plot.type = '2D',
-                rt.max = 62*60)
+                rt.max = 62*60, ion=NULL)
 tea.2d
 tea.2d = plot2D(tea.data, file = 1, 60, 25, plot.type = '2Di')
 tea.2d

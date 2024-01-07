@@ -66,8 +66,9 @@ rasterize = function(object,
   # If not an EIC
   if(is.null(ion)){
     # but if mz range specified
-    if(mz.min != object@featureData@data$lowMZ ||
-       mz.max != object@featureData@data$highMZ){
+    ## not sure what this was supposed to do
+    if(mz.min != min(object@featureData@data$lowMZ) ||
+       mz.max != max(object@featureData@data$highMZ)){
       eic.data = extractIonChromatogram(object, file, mz.min, mz.max)
       # Join intensity to rt data
       plot.2d.df = as.data.frame(cbind(rt, rt.2d))

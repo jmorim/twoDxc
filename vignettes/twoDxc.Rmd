@@ -243,6 +243,67 @@ eics.2d <- lapply(data.mz.range, function(x){
 })
 ```
 
+Annotating 2D chromatogram
+```{r}
+plot.195 = plot2D(tea.data, file = 1, mod.time = 60, delay.time = 30, ion = 195.0882)
+# Add rectangle around detected peak
+peak.data = tea.data
+plot.annotated = plot.195 +
+  geom_rect(
+    aes(xmin=40, xmax=50, ymin=40, ymax=80),
+    fill = 'transparent',
+    color = 'red',
+    linewidth = 1.5
+  )
+plot.annotated
+plot.195
+test.plot.data = rasterize(tea.data, mod.time = 60, delay.time = 30,
+  ion = 195.0882, mz.tol = 'ppm')
+test.plot.data |> head()
+
+test.plot = ggplot(test.plot.data, aes(x = rt.adj, y = rt.2d.adj)) +
+  geom_raster(aes(fill = intensity), interpolate = T, na.rm = T) +
+  scale_fill_distiller(palette = 'Spectral', direction = -1) +
+  xlab('1D Retention Time (s)') +
+  ylab('2D Retention Time (s)') +
+  ggtitle(
+    paste0('EIC: Ion 195.0882')
+  ) +
+  theme_classic()
+test.plot
+test.plot + 
+  geom_rect(
+    fill = 'transparent',
+    color = 'red',
+#    alpha = 0.5,
+    aes(xmin = 2500, xmax = 3000, ymin = 20, ymax = 40),
+  )
+
+tea.data@featureData
+xsaFA.multi |> slotNames()
+tea.data@featureData@data |> head()
+xsa2D.multi |> slotNames()
+xsa2D.multi@pspec2D |> head()
+xsa2D.multi@pspec2D |> nrow()
+
+pspecs = xsa2D.multi@pspec2D
+pspecs = pspecs |> filter(psg.2d < 10)
+pspecs |> nrow()
+tic2d = plot2D(tea.data, mod.time = 60, delay.time = 30)
+tic2d + 
+  lapply(1:nrow(pspecs), function(i) {
+    geom_rect(
+      aes(
+        xmin = pspecs[i, 'rtmin'],
+        xmax = pspecs[i, 'rtmax'],
+        ymin = pspecs[i, 'rtmin.2d'],
+        ymax = pspecs[i, 'rtmax.2d']
+      ),
+      fill = 'transparent',
+      color = 'red'
+    )
+  })
+```
 GCxGC example
 ```{r gc}
 gc.file = system.file('tea_data', 'GCxGC_ex.mzML', package = 'twoDxc')

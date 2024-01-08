@@ -144,7 +144,7 @@ rasterize = function(object,
 #' ggplot2 for plotting.
 #'
 #' @param object An MSnExp object
-#' @param file Which file (numeric, not filename) to pull data from. Default is
+#' @param file File (numeric, not filename) from which to pull data. Default is
 #'               1
 #' @param mod.time The modulation time of the 2D run
 #' @param delay.time The time it takes for modulation to start.
@@ -243,7 +243,7 @@ setMethod('plot2D', 'MSnExp', function(object,
                                        filepath = '.',
                                        print.output = T,
                                        mz.digits = 4,
-                                       plot.type = c('2Di', '2D', '3D')){
+                                       plot.type = c('2D', '2Di', '3D')){
 
   mz.tol = mz.tol[1]
   plot.type = plot.type[1]
@@ -297,7 +297,7 @@ setMethod('plot2D', 'MSnExp', function(object,
   # Turn scale direction into number, T == 1, F == 0
   scale.direction = 1 - (2 * reverse.scale)
 
-  if(plot.type== '2D'){
+  if(plot.type == '2D'){
     plot.2d = ggplot(plot.data, aes(x = rt.adj, y = rt.2d.adj)) +
       geom_raster(aes(fill = intensity), interpolate = T, na.rm = T) +
       scale_fill_distiller(palette = color.scale,
@@ -320,7 +320,7 @@ setMethod('plot2D', 'MSnExp', function(object,
         ggsave(paste0(filename), plot = plot.2d, path = filepath)
       }
     }
-  }else if(plot.type== '2Di'){
+  }else if(plot.type == '2Di'){
     plot.2d = plot_ly(z = as.matrix(plot.data),
                       type = 'heatmap',
                       colors = color.scale,
@@ -328,7 +328,7 @@ setMethod('plot2D', 'MSnExp', function(object,
                       zsmooth = 'best') %>%
       layout(xaxis = list(title = '1D Retention Time (min)'),
              yaxis = list(title = '2D Retention Time (s)'))
-  }else{
+  }else if(plot.type == '3D'){
     plot.2d = plot_ly(z = ~as.matrix(plot.data),
                       colors = color.scale,
                       reversescale = reverse.scale) %>%

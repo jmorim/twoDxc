@@ -304,6 +304,38 @@ tic2d +
     )
   })
 ```
+Pesticides from 2DLC standard mix
+```{r}
+pesticides.files= dir(system.file('extdata/pesticides', package='twoDxc'), full.names=T)[3:5]
+pesticides.data = readMSData(pesticides.files, mode='onDisk')
+pesticides.data |> filterFile(3)
+pesticides.plot = plot2D(pesticides.data |>
+  filterFile(3), mod.time = 0.3 * 60)
+```
+```{r}
+tea.gzips = dir(system.file('extdata', package='twoDxc'), pattern='.gz', full.names = T)
+system(paste('gzip -d', tea.gzips[5]))
+tea.file = dir(system.file('extdata', package='twoDxc'), pattern='\\.mzML$', full.names = T)
+tea.data = readMSData(tea.file, mode='onDisk')
+tea.plot = plot2D(tea.data, file = 1, mod.time = 60, delay.time = 30)
+tea.plot
+
+pesticides.plot = plot2D(pesticides.data |> filterFile(1),
+  mod.time = 0.3105 * 60, delay.time = 0)
+pesticides.plot
+
+pesticides.plot1 = plot2D(pesticides.data |> filterFile(1),
+  mod.time = 0.3105 * 60, rt.min = 15 * 60 + 22, delay.time = 9, log.scale = F)
+pesticides.plot1
+
+pesticides.plot2 = plot2D(pesticides.data |> filterFile(2),
+  mod.time = 0.3105 * 60, rt.min = 15 * 60 + 22, delay.time = 9, log.scale = F)
+pesticides.plot2
+
+pesticides.plot3 = plot2D(pesticides.data |> filterFile(3),
+  mod.time = 0.3105 * 60, rt.min = 15 * 60 + 22, delay.time = 9, log.scale = F)
+pesticides.plot3
+```
 GCxGC example
 ```{r gc}
 gc.file = system.file('tea_data', 'GCxGC_ex.mzML', package = 'twoDxc')

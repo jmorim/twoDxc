@@ -50,9 +50,17 @@ library(dplyr)
 library(future.apply)
 library(ggplot2)
 
-tea.file <- system.file('extdata', 'tea_pool_1.mzML', package = 'twoDxc')
+tea.files.gz <- dir(system.file('extdata', package = 'twoDxc'),
+                full.names = T) 
 
-tea.data <- readMSData(tea.file, mode = 'onDisk')
+tea.file.path = tea.files.gz[grep('tea_pool_1.mzML.gz', tea.files.gz)]
+tea.file.temp = tempfile();
+gz_con = gzcon(file(tea.file.path, 'rb'))
+writeLines(readLines(gz_con, n = file.info(tea.file.path)$size),
+         tea.file.temp)
+close(gz_con)
+
+tea.data <- readMSData(tea.file.temp, mode = 'onDisk')
 ```
 
 # `xcms` preprocessing
@@ -99,16 +107,539 @@ plot(feature.chroms)
 Notice the same ions are found about 60 seconds apart.
 
 # CAMERA annotation
+```{r}
+findIsotopesPspec <- function(isomatrix, mz, ipeak, int, params){
+    ## isomatrix - isotope annotations (5 column matrix)
+    ## mz - m/z vector, contains all m/z values from specific pseudospectrum
+    ## int - int vector, see above
+    ## maxiso - how many isotopic peaks are allowed
+    ## maxcharge - maximum allowed charge
+    ## devppm - scaled ppm error
+    ## mzabs - absolut error in m/z
+    
+    ## matrix with all important informationen
+    spectra <- matrix(c(mz, ipeak), ncol=2)
+    int     <- int[order(spectra[, 1]), , drop=FALSE]
+    spectra <- spectra[order(spectra[, 1]), ];    
+    cnt     <- nrow(spectra);
+    
+    ## calculate error
+    error.ppm <- params$devppm * mz;
+    
+    ## for every peak in pseudospectrum
+    for ( j in 1:(length(mz) - 1)){
+        ## create distance matrix
+        MI <- spectra[j:cnt, 1] - spectra[j, 1];
+        ## Sum up all possible/allowed isotope distances + error(ppm of peak mz and mzabs)
+        max.index <- max(which(MI < (sum(params$IM[1:params$maxiso, "mzmax"]) + error.ppm[j] + params$mzabs )))
+        ## check if one peaks falls into isotope window
+        if(max.index == 1){
+            ## no promising candidate found, move on
+            next;
+        }
+        
+        ## IM - isotope matrix (column diffs(min,max) per charge, row num. isotope)
+        ## STN: isn't it rather:
+        ## IM - isotope matrix (column diffs(min,max) per ISOTOPE, row num. charge state)
+        IM <- t(sapply(1:params$maxcharge,function(x){
+            mzmin <- (params$IM[, "mzmin"]) / x;
+            mzmax <- (params$IM[, "mzmax"]) / x;
+            error <-      (error.ppm[j]+params$mzabs) / x
+            res   <- c(0,0);
+            for(k in 1:length(mzmin)){
+                res <- c(res, mzmin[k]+res[2*k-1], mzmax[k]+res[2*k])
+            }
+            res[seq(1,length(res),by=2)] <- res[seq(1,length(res),by=2)]-error
+            res[seq(2,length(res),by=2)] <- res[seq(2,length(res),by=2)]+error
+            return (res[-c(1:2)])
+        } ))
+        
+        ## Sort IM to fix bug, with high ppm and mzabs values 
+        ## TODO: Find better solution and give feedback to user!
+        IM <- t(apply(IM,1,sort))
+        
+        ## find peaks, which m/z value is in isotope interval
+        hits <- t(apply(IM, 1, function(x){ findInterval(MI[1:max.index], x)}))
+        rownames(hits) <- c(1:nrow(hits))
+        colnames(hits) <- c(1:ncol(hits))
+        hits[which(hits==0)] <-NA
+        hits <- hits[, -1, drop=FALSE]
+        hits.iso <- hits%/%2 + 1;
+        
+        
+        ## check occurence of first isotopic peak
+        for(iso in 1:min(params$maxiso,ncol(hits.iso))){
+            hit <- apply(hits.iso,1, function(x) any(CAMERA:::naOmit(x)==iso))
+            hit[which(is.na(hit))] <- TRUE
+            if(all(hit))
+                break;
+            hits.iso[!hit,] <- t(apply(hits.iso[!hit,,drop=FALSE],1, function(x) {
+                if(!all(is.na(x))){
+                    ini <- which(x > iso)
+
+                    ## Here the following condition was previously:
+                    ## if(!is.infinite(ini) && length(ini) > 0){
+                    ##
+                    ## The fix for issue #44 assumes the follwoing:
+                    ## "There is at least one hit" Not sure why
+                    ## ini as return value of which() would contain inf at all
+
+                    if(!is.infinite(ini)[1] & length(ini) > 0){
+                        x[min(ini):ncol(hits.iso)] <- NA  
+                    }
+                }
+                x
+            }))
+        }
+        
+        ## set NA to 0
+        hits[which(is.na(hits.iso))] <- 0
+        ## check if any isotope is found
+        hit <- apply(hits, 1, function(x) sum(x)>0)
+        ## drop nonhits  
+        hits <- hits[hit, , drop=FALSE]
+        
+        ## if no first isotopic peaks exists, next
+        if(nrow(hits) == 0){
+            next;
+        }
+        
+        ## getting max. isotope cluster length
+        ## TODO: unique or not????
+        isohits   <- lapply(1:nrow(hits), function(x) which(hits[x, ] %% 2 !=0))
+        isolength <- sapply(isohits, length)
+
+        ## Check if any result is found
+        if(all(isolength==0)){
+            next;
+        }
+        
+        ## itensity checks
+        ## candidate.matrix
+        ## first column - how often succeded the isotope intensity test
+        ## second column - how often could a isotope int test be performed
+        candidate.matrix <- matrix(0, nrow=length(isohits), ncol=max(isolength)*2);
+        
+        for(iso in 1:length(isohits)){
+            for(candidate in 1:length(isohits[[iso]])){
+                for(sample.index in c(1:ncol(int))){
+                    charge <- as.numeric(row.names(hits)[iso])
+                    int.c12 <- int[j, sample.index]
+                    isotopePeak <- hits[iso,isohits[[iso]][candidate]]%/%2 + 1;
+                    if(isotopePeak == 1){
+                        ## first isotopic peak, check C13 rule
+                        int.c13 <- int[isohits[[iso]][candidate]+j, sample.index];
+                        int.available <- all(!is.na(c(int.c12, int.c13)))
+                        if (int.available){
+                            theo.mass <- spectra[j, 1] * charge; #theoretical mass
+                            numC      <- abs(round(theo.mass / 12)); #max. number of C in molecule
+                            inten.max <- int.c12 * numC * 0.011; #highest possible intensity
+                            inten.min <- int.c12 * 1    * 0.011; #lowest possible intensity
+                            if((int.c13 < inten.max && int.c13 > inten.min) || !params$filter){
+                                candidate.matrix[iso,candidate * 2 - 1] <- candidate.matrix[iso,candidate * 2 - 1] + 1
+                                candidate.matrix[iso,candidate * 2 ] <- candidate.matrix[iso,candidate * 2] + 1
+                            }else{
+                                candidate.matrix[iso,candidate * 2 ] <- candidate.matrix[iso,candidate * 2] + 1
+                            }
+                        } else {
+                            ## todo
+                        } 
+                    } else {
+                        ## x isotopic peak
+                        int.cx <- int[isohits[[iso]][candidate]+j, sample.index];
+                        int.available <- all(!is.na(c(int.c12, int.cx)))
+                        if (int.available) {
+                            intrange <- c((int.c12 * params$IM[isotopePeak,"intmin"]/100),
+                            (int.c12 * params$IM[isotopePeak,"intmax"]/100))
+                            ## filter Cx isotopic peaks muss be smaller than c12
+                            if(int.cx < intrange[2] && int.cx > intrange[1]){
+                                candidate.matrix[iso,candidate * 2 - 1] <- candidate.matrix[iso,candidate * 2 - 1] + 1
+                                candidate.matrix[iso,candidate * 2 ] <- candidate.matrix[iso,candidate * 2] + 1                        
+                            }else{
+                                candidate.matrix[iso,candidate * 2 ] <- candidate.matrix[iso,candidate * 2] + 1
+                            }
+                        } else {
+                            candidate.matrix[iso,candidate * 2 ] <- candidate.matrix[iso,candidate * 2] + 1
+                        }#end int.available
+                    }#end if first isotopic peak
+                }#for loop samples
+            }#for loop candidate
+        }#for loop isohits
+        
+        ## calculate ratios
+        candidate.ratio <- candidate.matrix[, seq(from=1, to=ncol(candidate.matrix),
+                                                  by=2)] / candidate.matrix[, seq(from=2, 
+                                                                                  to=ncol(candidate.matrix), by=2)];
+        if(is.null(dim(candidate.ratio))){
+            candidate.ratio <- matrix(candidate.ratio, nrow=nrow(candidate.matrix))
+        }
+        if(any(is.nan(candidate.ratio))){
+            candidate.ratio[which(is.nan(candidate.ratio))] <- 0;
+        }
+        
+        ## decision between multiple charges or peaks
+        for(charge in 1:nrow(candidate.matrix)){
+            if(any(duplicated(hits[charge, isohits[[charge]]]))){
+                ## One isotope peaks has more than one candidate
+                ## check if problem is still consistent
+                for(iso in unique(hits[charge, isohits[[charge]]])){
+                    if(length(index <- which(hits[charge, isohits[[charge]]]==iso))== 1){
+                        ## now duplicates next
+                        next;
+                    }else{
+                        ## find best
+                        index2 <- which.max(candidate.ratio[charge, index]);
+                        save.ratio <- candidate.ratio[charge, index[index2]]
+                        candidate.ratio[charge,index] <- 0
+                        candidate.ratio[charge,index[index2]] <- save.ratio
+                        index <- index[-index2]
+                        isohits[[charge]] <- isohits[[charge]][-index]
+                    }
+                }
+            }#end if
+            
+            for(isotope in 1:ncol(candidate.ratio)){
+                if(candidate.ratio[charge, isotope] >= params$minfrac){
+                    isomatrix <- rbind(isomatrix, 
+                                       c(spectra[j, 2],
+                                         spectra[isohits[[charge]][isotope]+j, 2], 
+                                         isotope, as.numeric(row.names(hits)[charge]), 0))
+                } else{
+                    break;
+                }
+            }
+        }# for(charge in 1:nrow(candidate.matrix)){
+    }# end for ( j in 1:(length(mz) - 1)){
+    
+    return(isomatrix)
+}
+
+setGeneric("findIsotopes", function(object, maxcharge=3, maxiso=4, ppm=5, mzabs=0.01, 
+                                    intval=c("maxo","into","intb"),minfrac=0.5, 
+                                    isotopeMatrix=NULL,filter=TRUE) standardGeneric("findIsotopes"));
+
+setMethod("findIsotopes", "xsAnnotate", 
+  function(object, maxcharge=3, maxiso=4, ppm=5, mzabs=0.01, 
+                   intval=c("maxo","into","intb"), minfrac=0.5,  isotopeMatrix=NULL,
+           filter=TRUE){
+  
+  #searches in every pseudospectrum after mass differences, 
+  #which matches isotope distances
+  
+  ####Test arguments####
+  #test maxcharge  
+  is.wholenumber = function(x, tol = .Machine$double.eps^0.5){
+    abs(x - round(x)) < tol
+  }
+  if(!is.wholenumber(maxcharge) || maxcharge < 1){
+    stop("Invalid argument 'maxcharge'. Must be integer and > 0.\n")
+  }
+  
+  #test maxiso
+  if(!is.wholenumber(maxiso) || maxiso < 1){
+    stop("Invalid argument 'maxiso'. Must be integer and > 0.\n")
+  }
+  
+  #test ppm
+  if(!is.numeric(ppm) || ppm < 0){
+    stop("Invalid argument 'ppm'. Must be numeric and not negative.\n")
+  }
+  
+  #test mzabs
+  if(!is.numeric(mzabs) || mzabs < 0){
+    stop("Invalid argument 'mzabs'. Must be numeric and not negative.\n")
+  }
+  
+  #test intval
+  intval <- match.arg(intval)
+  
+  #test minfrac
+  if(!is.numeric(minfrac) || minfrac < 0 || minfrac > 1){
+    stop("Invalid argument 'minfrac'. Must be numeric and between 0 and 1.\n")
+  }
+  
+  #test isotopeMatrix
+  if(!is.null(isotopeMatrix)){
+    if(!is.matrix(isotopeMatrix) || ncol(isotopeMatrix) != 4 || nrow(isotopeMatrix) < 1
+       || !is.numeric(isotopeMatrix)){
+      stop("Invalid argument 'isotopeMatrix'. Must be four column numeric matrix.\n")
+    } else {
+      colnames(isotopeMatrix) <- c("mzmin", "mzmax", "intmin", "intmax")
+    }
+  }else if(maxiso > 8){
+     stop("Invalid argument 'maxiso'. Must be lower 9 or provide your own isotopeMatrix.\n")
+  }else{
+    isotopeMatrix <- calcIsotopeMatrix(maxiso=maxiso)
+  }
+  ####End Test arguments####
+  
+  npeaks.global <- 0; #Counter for % bar
+  npspectra <- length(object@pspectra);
+
+  # scaling
+  devppm <- ppm / 1000000;
+  filter <- filter;
+  #generate parameter list
+  params <- list(maxiso=maxiso, maxcharge=maxcharge, devppm=devppm, mzabs=mzabs, IM=isotopeMatrix, minfrac=minfrac, filter=filter)
+  
+  #Check if object have been preprocessed with groupFWHM
+  if(npspectra < 1) {
+    cat("xsAnnotate contains no pseudospectra. Regroup all peaks into one!\n")
+    npspectra <- 1;
+    object@pspectra[[1]] <- seq(1:nrow(object@groupInfo));
+    object@psSamples  <- 1;
+  }
+  
+  #number of peaks in pseudospectra
+  ncl <- sum(sapply(object@pspectra, length));
+
+  # get mz,rt and intensity values from peaktable
+  if(nrow(groups(object@xcmsSet)) > 0){
+    ##multiple sample or grouped single sample
+    if(is.na(object@sample[1])){
+      index <- 1:length(object@xcmsSet@filepaths);
+    }else{
+      index <- object@sample;
+    }
+    cat("Generating peak matrix!\n");
+    mint     <- groupval(object@xcmsSet,value=intval)[,index,drop=FALSE];
+    imz <- object@groupInfo[, "mz", drop=FALSE];
+    irt <- object@groupInfo[, "rt", drop=FALSE];
+  }else{
+    ##one sample case
+    cat("Generating peak matrix!\n");
+    imz  <- object@groupInfo[, "mz", drop=FALSE];
+    irt  <- object@groupInfo[, "rt", drop=FALSE];
+    mint <- object@groupInfo[, intval, drop=FALSE];      
+  }
+  
+  isotope   <- vector("list", length(imz));
+    
+  isomatrix <- matrix(ncol=5, nrow=0);
+  colnames(isomatrix) <- c("mpeak", "isopeak", "iso", "charge", "intrinsic")
+
+
+  cat("Run isotope peak annotation\n % finished: ");
+  lp <- -1;
+
+  #look for isotopes in every pseudospectra
+  for(i in seq(along = object@pspectra)){
+    #get peak indizes for i-th pseudospectrum
+    ipeak <- object@pspectra[[i]];
+
+    #Ouput counter
+    percentOutput(npeaks.global, length(ipeak), ncl, lp)
+    
+    #Pseudospectrum has more than one peak
+    if(length(ipeak) > 1){
+      #peak mass and intensity for pseudospectrum
+      mz  <- imz[ipeak];
+      int <- mint[ipeak, , drop=FALSE];
+      isomatrix <-  findIsotopesPspec(isomatrix, mz, ipeak, int, params)              
+    }
+  }
+
+  #clean isotopes
+  if(is.null(nrow(isomatrix))) {
+    isomatrix = matrix(isomatrix, byrow=F, ncol=length(isomatrix)) 
+  }
+  
+  #check if every isotope has only one annotation
+  if(length(idx.duplicated <- which(duplicated(isomatrix[, 2]))) > 0){
+    peak.idx <- unique(isomatrix[idx.duplicated, 2]);
+    for( i in 1:length(peak.idx)){
+      #peak.idx has two or more annotated charge
+      #select the charge with the higher cardinality
+      peak <- peak.idx[i];
+      peak.mono.idx <- which(isomatrix[,2] == peak)
+      if(length(peak.mono.idx) < 2){
+        #peak has already been deleted
+        next;
+      }
+      peak.mono <- isomatrix[peak.mono.idx,1]
+      #which charges we have
+      charges.list   <- isomatrix[peak.mono.idx, 4];
+      tmp <- cbind(peak.mono,charges.list);
+      charges.length <- apply(tmp,1, function(x,isomatrix) { 
+        length(which(isomatrix[, 1] == x[1] & isomatrix[,4] == x[2])) }, 
+                              isomatrix);
+      idx <- which(charges.length == max(charges.length));
+      if(length(idx) == 1){
+        #max is unique
+        isomatrix <- isomatrix[-which(isomatrix[, 1] %in% peak.mono[-idx] & isomatrix[, 4] %in% charges.list[-idx]),, drop=FALSE]
+      }else{
+        #select this one, which lower charge
+        idx <- which.min(charges.list[idx]);
+        isomatrix <- isomatrix[-which(isomatrix[, 1] %in% peak.mono[-idx] & isomatrix[, 4] %in% charges.list[-idx]),, drop=FALSE]
+      }
+    }
+  }
+
+
+  #check if every isotope in one isotope grp, have the same charge
+  if(length(idx.duplicated <- which(duplicated(paste(isomatrix[, 1], isomatrix[, 3])))) > 0){
+    #at least one pair of peakindex and number of isotopic peak is identical
+    peak.idx <- unique(isomatrix[idx.duplicated,1]);
+    for( i in 1:length(peak.idx)){
+      #peak.idx has two or more annotated charge
+      #select the charge with the higher cardinality
+      peak <- peak.idx[i];
+      #which charges we have
+      charges.list   <- unique(isomatrix[which(isomatrix[, 1] == peak), 4]);
+      #how many isotopes have been found, which this charges
+      charges.length <- sapply(charges.list, function(x,isomatrix,peak) { length(which(isomatrix[, 1] == peak & isomatrix[, 4] == x)) },isomatrix,peak);
+      #select the charge which the highest cardinality
+      idx <- which(charges.length == max(charges.length));
+      if(length(idx) == 1){
+        #max is unique
+        isomatrix <- isomatrix[-which(isomatrix[, 1] == peak & isomatrix[, 4] %in% charges.list[-idx]),, drop=FALSE]
+      }else{
+        #select this one, which lower charge
+        idx <- which.min(charges.list[idx]);
+        isomatrix <- isomatrix[-which(isomatrix[, 1] == peak & isomatrix[, 4] %in% charges.list[-idx]),, drop=FALSE]
+      }
+    }
+  }
+
+  #Combine isotope cluster, if they overlap
+  index2remove <- c();
+
+  if(length(idx.duplicated <- which(isomatrix[, 1] %in% isomatrix[, 2]))>0){
+    for(i in 1:length(idx.duplicated)){
+      index <-  which(isomatrix[, 2] == isomatrix[idx.duplicated[i], 1])
+      index2 <- sapply(index, function(x, isomatrix) which(isomatrix[, 1] == isomatrix[x, 1] & isomatrix[,3] == 1),isomatrix)
+      if(length(index2) == 0){
+        index2remove <- c(index2remove,idx.duplicated[i])
+      }
+      max.index <- which.max(isomatrix[index,4]);
+      isomatrix[idx.duplicated[i], 1] <- isomatrix[index[max.index], 1];
+      isomatrix[idx.duplicated[i], 3] <- isomatrix[index[max.index], 3]+1;
+    }
+  }
+
+  if(length(index <- which(isomatrix[,"iso"] > maxiso)) > 0){
+    index2remove <- c(index2remove, index)
+  }
+  
+  if(length(index2remove) > 0){
+    isomatrix <- isomatrix[-index2remove,, drop=FALSE];
+  }
+
+  isomatrix <- isomatrix[order(isomatrix[,1]),,drop=FALSE]
+  #Create isotope matrix within object
+  object@isoID <- matrix(nrow=0, ncol=4);
+  colnames(object@isoID)  <-  c("mpeak", "isopeak", "iso", "charge");
+  
+  #Add isomatrix to object
+  object@isoID <- rbind(object@isoID, isomatrix[, 1:4]);
+  
+  # counter for isotope groups
+  globalcnt <- 0;
+  oldnum    <- 0;
+  
+  if(nrow(isomatrix) > 0){
+    for( i in 1:nrow(isomatrix)){
+      if(!isomatrix[i, 1] == oldnum){
+          globalcnt <- globalcnt+1; 
+          isotope[[isomatrix[i, 1]]] <- list(y=globalcnt, iso=0, charge=isomatrix[i, 4], val=isomatrix[i, 5]);
+          oldnum <- isomatrix[i, 1];
+      };
+      isotope[[isomatrix[i,2]]] <- list(y=globalcnt,iso=isomatrix[i,3],charge=isomatrix[i,4],val=isomatrix[i,5]);
+    }
+  }
+  cnt<-nrow(object@isoID);
+  cat("\nFound isotopes:",cnt,"\n");
+  object@isotopes <- isotope;
+  return(object);
+})
+
+calcIsotopeMatrix <- function(maxiso=4){
+  
+  if(!is.numeric(maxiso)){
+    stop("Parameter maxiso is not numeric!\n")  
+  } else if(maxiso < 1 | maxiso > 8){
+    stop(paste("Parameter maxiso must between 1 and 8. ",
+          "Otherwise use your own IsotopeMatrix.\n"),sep="")
+  }
+  
+  isotopeMatrix <- matrix(NA, 8, 4);
+  colnames(isotopeMatrix) <- c("mzmin", "mzmax", "intmin", "intmax")
+  
+  isotopeMatrix[1, ] <- c(1.000, 1.0040, 1.0, 150)
+  isotopeMatrix[2, ] <- c(0.997, 1.0040, 0.01, 200)
+  isotopeMatrix[3, ] <- c(1.000, 1.0040, 0.001, 200)
+  isotopeMatrix[4, ] <- c(1.000, 1.0040, 0.0001, 200)
+  isotopeMatrix[5, ] <- c(1.000, 1.0040, 0.00001, 200)
+  isotopeMatrix[6, ] <- c(1.000, 1.0040, 0.000001, 200)
+  isotopeMatrix[7, ] <- c(1.000, 1.0040, 0.0000001, 200)
+  isotopeMatrix[8, ] <- c(1.000, 1.0040, 0.00000001, 200)  
+  
+  return(isotopeMatrix[1:maxiso, , drop=FALSE])
+
+}
+```
 
 We will now group ions into pseudospectra using the CAMERA package.
 ```{r CAMERA_annotation}
+load_all('../R/x86_64-pc-linux-gnu-library/4.3/CAMERA');
+file = system.file('mzML/MM14.mzML', package = 'CAMERA')
+xs = xcmsSet(file, method='centWave', ppm = 30, peakwidth = c(5, 10))
+an = xsAnnotate(xs)
+an.f = groupFWHM(an)
+an.i = CAMERA::findIsotopes(an.f)
+
+xs |> chromatogram()
+
+mouse.peaks = readMSData(file, mode='onDisk') |> findChromPeaks(param=CentWaveParam(ppm = 30, peakwidth = c(5, 10)))
+mouse.peaks
+xs.2 = xsAnnotate(as(mouse.peaks, 'xcmsSet'))
+xs.2 = groupFWHM(xs.2)
+xs.2 = findIsotopes(xs.2)
+
 tea.xsa <- xsAnnotate(as(tea.peaks, 'xcmsSet'))
 # Group by fwhm
 tea.xsaF <- groupFWHM(tea.xsa, perfwhm = 0.6)
 # Label isotopes
 ## subscript out of bounds error
 ## see https://github.com/sneumann/CAMERA/issues/27
-#tea.xsaI <- findIsotopes(tea.xsaF, mzabs = 0.01)
+tea.xsaI <- CAMERA::findIsotopes(tea.xsaF, ppm=20) 
+###
+test.pspectra = tea.xsaF@pspectra
+test.imz = tea.xsaF@groupInfo[, 'mz', drop=F]
+# int matrix? max int?
+test.mint = tea.xsaF@groupInfo[, 'maxo', drop=F]
+isomatrix = matrix(ncol=5, nrow=0)
+colnames(isomatrix) = c('mpeak', 'isopeak', 'iso', 'charge', 'intrinsic')
+
+seq(along=tea.xsaF@pspectra)
+test.mint
+test.ipeak = tea.xsaF@pspectra[[1]]
+test.mint[test.ipeak, , drop=F]
+length(test.ipeak)
+for(i in seq(along=test.pspectra)){
+  test.ipeak = test.pspectra[[i]]
+  if(length(test.ipeak) > 1){
+    test.mz = test.imz[test.ipeak]
+    test.int = test.mint[test.ipeak, , drop=F]
+    print(paste0('test.test.int: ', test.test.int))
+    print('isomatrix before:')
+    print(isomatrix)
+    isomatrix = findIsotopesPspec(isomatrix, test.mz, test.ipeak, test.int, params=list(maxiso=4, maxcharge=3, devppm=5/10^6, mzabs=0.01, IM=NULL, minfrac=0.5, filter=TRUE))
+    print('isomatrix after')
+    print(isomatrix)
+  }
+}
+
+
+isomatrix
+test.ipeak = test.pspectra[[21]]
+test.imz[test.ipeak]
+test.mint[test.ipeak]
+test.int[order(matrix(c(test.imz[test.ipeak], test.ipeak), ncol=2)[,1]), , drop=F]
+test.isomatrix = findIsotopesPspec(matrix(ncol=5, nrow=0), test.imz[test.ipeak], test.ipeak, test.mint[test.ipeak, , drop=F], list(maxiso=4, maxcharge=3, devppm=5/10^6, mzabs=0.01, IM=NULL, minfrac=0.5, filter=TRUE))
+test.isomatrix
+###
+
 # Group by correlation
 tea.xsaC <- groupCorr(tea.xsaF)
 # Find adducts
@@ -335,6 +866,70 @@ pesticides.plot2
 pesticides.plot3 = plot2D(pesticides.data |> filterFile(3),
   mod.time = 0.3105 * 60, rt.min = 15 * 60 + 22, delay.time = 9, log.scale = F)
 pesticides.plot3
+```
+Build list of pesticide m/z's with webchem
+```{r}
+library(webchem)
+pesticide.names = c(
+  'atrazine',
+  'atrazine-desethyl',
+  'chlorotoluron',
+  'diuron',
+  'hexazinone',
+  'linuron',
+  'metazachlor',
+  'methabenzthiazuron',
+  'metobromuron',
+  'metoxuron',
+  'nifedipine',
+  'nimodipine',
+  'prometryn',
+  'sebuthylazine',
+  'terbuthylazine',
+  'terbuthylazine-desethyl'
+)
+pesticide.metadata = cbind(
+  pesticide.names, 
+  get_cid(pesticide.names) |> 
+    select(cid) |> 
+    pc_prop('MonoisotopicMass')
+  )
+h.mass = 1.0078
+pesticide.metadata = pesticide.metadata |> mutate('neg ion' = as.numeric(MonoisotopicMass) - h.mass)
+pesticide.metadata
+
+atrazine.eic = plot2D(pesticides.data |> filterFile(1), mod.time=0.3105 * 60, delay.time = 9,
+  ion = pesticide.metadata$`neg ion`[1])
+
+atrazine.eic
+
+pesticide.eics = c()
+for(i in 1:nrow(pesticide.metadata)){
+  pesticide.eics = append(pesticide.eics,
+    plot2D(pesticides.data |> filterFile(1),
+    mod.time=0.3105, delay.time=9,
+    ion = pesticide.metadata$`neg ion`[i]))
+}
+pesticide.metadata
+pesticide.metadata$`neg ion`[1]
+
+pesticide.plot = c()
+for(i in 1:nrow(pesticide.metadata)){
+  pesticide.plot[i] = plot2D(pesticides.data |> filterFile(1),
+    mod.time=0.3105 * 60, delay.time=9, ion = as.numeric(pesticide.metadata$`neg ion`[i])
+  )
+}
+View(pesticide.plot[1])
+
+chlorotoluron.plot = plot2D(pesticides.data |> filterFile(1),
+  mod.time = 0.3105 * 60, delay.time = 9, ion = as.numeric(pesticide.metadata$`neg ion`[3]))
+chlorotoluron.plot
+
+diuron.plot = plot2D(pesticides.data |> filterFile(1), mod.time=0.3105 * 60,
+  delay.time = 9, ion = pesticide.metadata$`neg ion`[4] |> as.numeric())
+diuron.plot
+
+pesticide.eics
 ```
 GCxGC example
 ```{r gc}
